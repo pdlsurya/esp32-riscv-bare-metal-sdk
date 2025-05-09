@@ -24,6 +24,7 @@ $RECYCLE.BIN/
 
 
 # Build system directories
+**/build.sh
 **/build/
 /bin/
 /obj/
