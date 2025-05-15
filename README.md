@@ -17,6 +17,9 @@ A minimal bare-metal SDK for the ESP32-C6 RISC-V microcontroller, developed with
 - [esptool.py](https://github.com/espressif/esptool) for flashing
 - Build system: CMake with Make or Ninja
 
+## Note 
+A few low-level modules (like portions of the HAL headers) are adapted from Espressif's ESP-IDF SDK to save time reverse engineering register layouts.
+
 ## Getting Started
 
 ### Clone the Repository
