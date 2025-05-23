@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,6 +18,7 @@
 #include "soc/i2s_periph.h"
 #include "soc/i2s_struct.h"
 #include "soc/pcr_struct.h"
+#include "soc/soc_etm_source.h"
 #include "hal/i2s_types.h"
 #include "hal/hal_utils.h"
 
@@ -33,9 +34,34 @@ extern "C" {
 
 #define I2S_LL_CLK_FRAC_DIV_N_MAX  256 // I2S_MCLK = I2S_SRC_CLK / (N + b/a), the N register is 8 bit-width
 #define I2S_LL_CLK_FRAC_DIV_AB_MAX 512 // I2S_MCLK = I2S_SRC_CLK / (N + b/a), the a/b register is 9 bit-width
+#define I2S_LL_SLOT_FRAME_BIT_MAX  128 // Up-to 128 bits in one frame, determined by MAX(half_sample_bits) * 2
 
 #define I2S_LL_PLL_F160M_CLK_FREQ      (160 * 1000000) // PLL_F160M_CLK: 160MHz
 #define I2S_LL_DEFAULT_CLK_FREQ     I2S_LL_PLL_F160M_CLK_FREQ    // The default PLL clock frequency while using I2S_CLK_SRC_DEFAULT
+
+#define I2S_LL_ETM_EVENT_TABLE(i2s_port, chan_dir, event)  \
+    (uint32_t[SOC_I2S_NUM][2][I2S_ETM_EVENT_MAX]){{  \
+                                          [I2S_DIR_RX - 1] = {  \
+                                              [I2S_ETM_EVENT_DONE] = I2S_EVT_RX_DONE, \
+                                              [I2S_ETM_EVENT_REACH_THRESH] = I2S_EVT_X_WORDS_RECEIVED,  \
+                                          },  \
+                                          [I2S_DIR_TX - 1] = {  \
+                                              [I2S_ETM_EVENT_DONE] = I2S_EVT_TX_DONE,  \
+                                              [I2S_ETM_EVENT_REACH_THRESH] = I2S_EVT_X_WORDS_SENT, \
+                                          }}}[i2s_port][(chan_dir) - 1][event]
+
+
+#define I2S_LL_ETM_TASK_TABLE(i2s_port, chan_dir, task)  \
+    (uint32_t[SOC_I2S_NUM][2][I2S_ETM_TASK_MAX]){{  \
+                                         [I2S_DIR_RX - 1] = {  \
+                                             [I2S_ETM_TASK_START] = I2S_TASK_START_RX, \
+                                             [I2S_ETM_TASK_STOP] = I2S_TASK_STOP_RX, \
+                                         },  \
+                                         [I2S_DIR_TX - 1] = {  \
+                                             [I2S_ETM_TASK_START] = I2S_TASK_START_TX, \
+                                             [I2S_ETM_TASK_STOP] = I2S_TASK_STOP_TX, \
+                                         }}}[i2s_port][(chan_dir) - 1][task]
+#define I2S_LL_ETM_MAX_THRESH_NUM       (0x3FFUL)
 
 /**
  *
@@ -219,6 +245,9 @@ static inline void i2s_ll_tx_clk_set_src(i2s_dev_t *hw, i2s_clock_src_t src)
     case I2S_CLK_SRC_XTAL:
         PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 0;
         break;
+    case I2S_CLK_SRC_PLL_240M:
+        PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 1;
+        break;
     case I2S_CLK_SRC_PLL_160M:
         PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel = 2;
         break;
@@ -244,6 +273,9 @@ static inline void i2s_ll_rx_clk_set_src(i2s_dev_t *hw, i2s_clock_src_t src)
     {
     case I2S_CLK_SRC_XTAL:
         PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel = 0;
+        break;
+    case I2S_CLK_SRC_PLL_240M:
+        PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel = 1;
         break;
     case I2S_CLK_SRC_PLL_160M:
         PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel = 2;
@@ -363,7 +395,7 @@ static inline void i2s_ll_rx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
 
 /**
  * @brief Configure I2S RX module clock divider
- * @note mclk on ESP32 is shared by both TX and RX channel
+ * @note mclk on ESP32C6 is shared by both TX and RX channel
  *
  * @param hw Peripheral I2S hardware instance address.
  * @param mclk_div The mclk division coefficients
@@ -385,6 +417,28 @@ static inline void i2s_ll_rx_set_mclk(i2s_dev_t *hw, const hal_utils_clk_div_t *
 }
 
 /**
+ * @brief Update the TX configuration
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ */
+static inline void i2s_ll_tx_update(i2s_dev_t *hw)
+{
+    hw->tx_conf.tx_update = 1;
+    while (hw->tx_conf.tx_update);
+}
+
+/**
+ * @brief Update the RX configuration
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ */
+static inline void i2s_ll_rx_update(i2s_dev_t *hw)
+{
+    hw->rx_conf.rx_update = 1;
+    while (hw->rx_conf.rx_update);
+}
+
+/**
  * @brief Start I2S TX
  *
  * @param hw Peripheral I2S hardware instance address.
@@ -392,8 +446,7 @@ static inline void i2s_ll_rx_set_mclk(i2s_dev_t *hw, const hal_utils_clk_div_t *
 static inline void i2s_ll_tx_start(i2s_dev_t *hw)
 {
     // Have to update registers before start
-    hw->tx_conf.tx_update = 1;
-    while (hw->tx_conf.tx_update);
+    i2s_ll_tx_update(hw);
     hw->tx_conf.tx_start = 1;
 }
 
@@ -405,8 +458,7 @@ static inline void i2s_ll_tx_start(i2s_dev_t *hw)
 static inline void i2s_ll_rx_start(i2s_dev_t *hw)
 {
     // Have to update registers before start
-    hw->rx_conf.rx_update = 1;
-    while (hw->rx_conf.rx_update);
+    i2s_ll_rx_update(hw);
     hw->rx_conf.rx_start = 1;
 }
 
@@ -464,7 +516,7 @@ static inline void i2s_ll_rx_set_eof_num(i2s_dev_t *hw, int eof_num)
 }
 
 /**
- * @brief Congfigure TX chan bit and audio data bit
+ * @brief Configure TX chan bit and audio data bit
  *
  * @param hw Peripheral I2S hardware instance address.
  * @param chan_bit The chan bit width
@@ -477,7 +529,7 @@ static inline void i2s_ll_tx_set_sample_bit(i2s_dev_t *hw, uint8_t chan_bit, int
 }
 
 /**
- * @brief Congfigure RX chan bit and audio data bit
+ * @brief Configure RX chan bit and audio data bit
  *
  * @param hw Peripheral I2S hardware instance address.
  * @param chan_bit The chan bit width
@@ -730,15 +782,29 @@ static inline void i2s_ll_rx_enable_std(i2s_dev_t *hw)
 }
 
 /**
- * @brief Enable TX PDM mode.
+ * @brief Enable I2S TX PDM mode
  *
  * @param hw Peripheral I2S hardware instance address.
+ * @param pcm2pdm_en Set true to enable TX PCM to PDM filter
  */
-static inline void i2s_ll_tx_enable_pdm(i2s_dev_t *hw)
+static inline void i2s_ll_tx_enable_pdm(i2s_dev_t *hw, bool pcm2pdm_en)
 {
     hw->tx_conf.tx_pdm_en = true;
     hw->tx_conf.tx_tdm_en = false;
-    hw->tx_pcm2pdm_conf.pcm2pdm_conv_en = true;
+    hw->tx_pcm2pdm_conf.pcm2pdm_conv_en = pcm2pdm_en;
+}
+
+/**
+ * @brief Enable I2S RX PDM mode
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @param pdm2pcm_en Set true to enable RX PDM to PCM filter
+ */
+static inline void i2s_ll_rx_enable_pdm(i2s_dev_t *hw, bool pdm2pcm_en)
+{
+    HAL_ASSERT(!pdm2pcm_en);  // C6 does not have PDM2PCM filter
+    hw->rx_conf.rx_pdm_en = true;
+    hw->rx_conf.rx_tdm_en = false;
 }
 
 /**
@@ -898,21 +964,6 @@ static inline uint32_t i2s_ll_tx_get_pdm_fp(i2s_dev_t *hw)
 static inline uint32_t i2s_ll_tx_get_pdm_fs(i2s_dev_t *hw)
 {
     return hw->tx_pcm2pdm_conf1.tx_pdm_fs;
-}
-
-/**
- * @brief Enable RX PDM mode.
- * @note  ESP32-C6 doesn't support pdm in rx mode, disable anyway
- *
- * @param hw Peripheral I2S hardware instance address.
- * @param pdm_enable Set true to RX enable PDM mode (ignored)
- */
-static inline void i2s_ll_rx_enable_pdm(i2s_dev_t *hw, bool pdm_enable)
-{
-    // Due to the lack of `PDM to PCM` module on ESP32-C6, PDM RX is not available
-    HAL_ASSERT(!pdm_enable);
-    hw->rx_conf.rx_pdm_en = 0;
-    hw->rx_conf.rx_tdm_en = 1;
 }
 
 /**
@@ -1134,6 +1185,28 @@ static inline void i2s_ll_tx_pdm_line_mode(i2s_dev_t *hw, i2s_pdm_tx_line_mode_t
 {
     hw->tx_pcm2pdm_conf.tx_pdm_dac_mode_en = line_mode > I2S_PDM_TX_ONE_LINE_CODEC;
     hw->tx_pcm2pdm_conf.tx_pdm_dac_2out_en = line_mode != I2S_PDM_TX_ONE_LINE_DAC;
+}
+
+/**
+ * @brief Set the TX ETM threshold of REACH_THRESH event
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @param thresh The threshold that send
+ */
+static inline void i2s_ll_tx_set_etm_threshold(i2s_dev_t *hw, uint32_t thresh)
+{
+    hw->etm_conf.etm_tx_send_word_num = thresh;
+}
+
+/**
+ * @brief Set the RX ETM threshold of REACH_THRESH event
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @param thresh The threshold that received
+ */
+static inline void i2s_ll_rx_set_etm_threshold(i2s_dev_t *hw, uint32_t thresh)
+{
+    hw->etm_conf.etm_rx_receive_word_num = thresh;
 }
 
 #ifdef __cplusplus

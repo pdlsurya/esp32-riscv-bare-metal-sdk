@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -85,6 +85,29 @@ typedef enum {
 } i2s_pcm_compress_t;
 #endif // SOC_I2S_SUPPORTS_PCM
 
+/**
+ * @brief I2S PDM data format
+ *
+ */
+typedef enum {
+    I2S_PDM_DATA_FMT_PCM = 0,       /*!< PDM RX:
+                                     *   Enable the hardware PDM to PCM filter to convert the inputted PDM data on the line into PCM format in software,
+                                     *   so that the read data in software is PCM format data already, no need additional software filter.
+                                     *   PCM data format is only available when PCM2PDM filter is supported in hardware.
+                                     *   PDM TX:
+                                     *   Enable the hardware PCM to PDM filter to convert the written PCM data in software into PDM format on the line,
+                                     *   so that we only need to write the PCM data in software, no need to prepare raw PDM data in software.
+                                     *   PCM data format is only available when PDM2PCM filter is supported in hardware.
+                                     */
+    I2S_PDM_DATA_FMT_RAW = 1,       /*!< PDM RX:
+                                     *   Read the raw PDM data directly in software, without the hardware PDM to PCM filter.
+                                     *   You may need a software PDM to PCM filter to convert the raw PDM data that read into PCM format.
+                                     *   PDM TX:
+                                     *   Write the raw PDM data directly in software, without the hardware PCM to PDM filter.
+                                     *   You may need to prepare the raw PDM data in software to output the PDM format data on the line.
+                                     */
+} i2s_pdm_data_fmt_t;
+
 #if SOC_I2S_SUPPORTS_PDM_RX
 /**
  * @brief I2S PDM RX down-sampling mode
@@ -98,7 +121,7 @@ typedef enum {
 
 #if SOC_I2S_SUPPORTS_PDM_TX
 /**
- * @brief pdm tx singnal scaling mode
+ * @brief pdm tx signal scaling mode
  */
 typedef enum {
     I2S_PDM_SIG_SCALING_DIV_2 = 0,   /*!< I2S TX PDM signal scaling: /2 */
@@ -124,7 +147,7 @@ typedef enum {
 
 /**
  * @brief I2S slot select in standard mode
- * @note  It has different meanings in tx/rx/mono/stereo mode, and it may have differen behaviors on different targets
+ * @note  It has different meanings in tx/rx/mono/stereo mode, and it may have different behaviors on different targets
  *        For the details, please refer to the I2S API reference
  */
 typedef enum {
@@ -184,6 +207,34 @@ typedef enum {
 } i2s_tdm_slot_mask_t;
 #endif // SOC_I2S_SUPPORTS_TDM
 
+/**
+ * @brief I2S channel events that supported by the ETM module
+ */
+typedef enum {
+    /** Trigger condition:
+     *  TX: no data to send in the TX FIFO, i.e., DMA need to stop (next desc is NULL)
+     *  RX: 1. If rx_stop_mode = 0, this event will trigger when DMA is stopped (next desc is NULL)
+     *      2. If rx_stop_mode = 1, this event will trigger when DMA in_suc_eof.
+     *      3. If rx_stop_mode = 2, this event will trigger when RX FIFO is full.
+     */
+    I2S_ETM_EVENT_DONE, /*!< Event that I2S TX or RX stopped */
+    /** Trigger condition:
+     *  TX: the sent words(in 32-bit) number reach the threshold that configured in `etm_tx_send_word_num`
+     *  RX: the received words(in 32-bit) number reach the threshold that configured in `etm_rx_receive_word_num`
+     *      and `etm_rx_receive_word_num` should be smaller than the size of the DMA buffer in one `in_suc_eof` event.
+     */
+    I2S_ETM_EVENT_REACH_THRESH, /*!< Event that the I2S sent or received data reached the threshold */
+    I2S_ETM_EVENT_MAX, /*!< Maximum number of events */
+} i2s_etm_event_type_t;
+
+/**
+ * @brief I2S channel tasks that supported by the ETM module
+ */
+typedef enum {
+    I2S_ETM_TASK_START,     /*!< Start the I2S channel */
+    I2S_ETM_TASK_STOP,      /*!< Stop the I2S channel */
+    I2S_ETM_TASK_MAX,       /*!< Maximum number of tasks */
+} i2s_etm_task_type_t;
 
 #ifdef __cplusplus
 }

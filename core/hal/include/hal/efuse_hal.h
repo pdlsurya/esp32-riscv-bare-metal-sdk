@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "soc/soc_caps.h"
+#include "hal/ecdsa_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,16 +70,54 @@ uint32_t efuse_hal_get_major_chip_version(void);
  */
 uint32_t efuse_hal_get_minor_chip_version(void);
 
+/**
+ * @brief Returns the chip package version
+ */
+uint32_t efuse_hal_get_chip_ver_pkg(void);
+
 #if SOC_EFUSE_ECDSA_KEY
 /**
  * @brief Set the efuse block that should be used as ECDSA private key
  *
  * @note The efuse block must be burnt with key purpose ECDSA_KEY
  *
- * @param efuse_key_blk Efuse key block number (Must be in [EFUSE_BLK_KEY0...EFUSE_BLK_KEY_MAX - 1] range)
+ * @param curve ECDSA curve type
+ * @param efuse_key_blk     If two blocks are used to store the key, then the macro HAL_ECDSA_COMBINE_KEY_BLOCKS() can be used to combine them. The macro is defined in hal/ecdsa_types.h
+ *                          Each efuse key block number (Must be in [EFUSE_BLK_KEY0...EFUSE_BLK_KEY_MAX - 1] range).
  */
-void efuse_hal_set_ecdsa_key(int efuse_key_blk);
+void efuse_hal_set_ecdsa_key(ecdsa_curve_t curve, int efuse_key_blk);
 #endif
+
+#if SOC_RECOVERY_BOOTLOADER_SUPPORTED
+
+#define EFUSE_RECOVERY_BOOTLOADER_FLASH_SECTOR_LEN (12)
+#define EFUSE_RECOVERY_BOOTLOADER_ENABLED(sector) ((sector) != 0 && (sector) != ((1 << EFUSE_RECOVERY_BOOTLOADER_FLASH_SECTOR_LEN) - 1))
+
+/**
+ * @brief Returns recovery bootloader flash address
+ *
+ * @return Recovery bootloader flash address.
+ */
+uint32_t efuse_hal_get_recovery_bootloader_address(void);
+
+/**
+ * @brief Converts a recovery bootloader address to the corresponding flash sector.
+ *
+ * This function translates a recovery bootloader address in bytes
+ * into the equivalent flash sector number.
+ *
+ * @param address The recovery bootloader address in bytes.
+ * @return The flash sector number corresponding to the given address.
+ */
+uint32_t efuse_hal_convert_recovery_bootloader_address_to_flash_sectors(uint32_t address);
+
+/**
+ * @brief Returns true if recovery bootloader address is configured
+ *
+ * @return True - Recovery bootloader address is configured.
+ */
+bool efuse_hal_recovery_bootloader_enabled(void);
+#endif // SOC_RECOVERY_BOOTLOADER_SUPPORTED
 
 #ifdef __cplusplus
 }

@@ -11,10 +11,14 @@
 #include "soc/soc_caps.h"
 #include "soc/assist_debug_reg.h"
 #include "soc/interrupt_reg.h"
-#include "interrupt_plic.h"
 #include "esp_attr.h"
 #include "riscv/csr.h"
 
+#if defined(TARGET_SOC_ESP32P4)
+#include "interrupt_clic.h"
+#elif defined(TARGET_SOC_ESP32C6)
+#include "interrupt_plic.h"
+#endif
 
 #ifdef __cplusplus
 extern "C"
@@ -347,11 +351,11 @@ extern "C"
 
         /* Based on sample code for CAS from RISCV specs v2.2, atomic instructions */
         __asm__ __volatile__(
-            "cas: lr.w %0, 0(%2)     \n" // load 4 bytes from addr (%2) into old_value (%0)
-            "     bne  %0, %3, fail  \n" // fail if old_value if not equal to compare_value (%3)
+            "1: lr.w %0, 0(%2)     \n"   // load 4 bytes from addr (%2) into old_value (%0)
+            "     bne  %0, %3, 2f  \n"   // fail if old_value if not equal to compare_value (%3)
             "     sc.w %1, %4, 0(%2) \n" // store new_value (%4) into addr,
-            "     bnez %1, cas       \n" // if we failed to store the new value then retry the operation
-            "fail:                   \n"
+            "     bnez %1, 1b     \n"    // if we failed to store the new value then retry the operation
+            "2:                   \n"
             : "+r"(old_value), "+r"(error)                  // output parameters
             : "r"(addr), "r"(compare_value), "r"(new_value) // input parameters
         );

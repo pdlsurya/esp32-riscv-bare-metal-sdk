@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -28,6 +28,8 @@ typedef struct cam_hal_context {
  */
 typedef struct cam_hal_config {
     int port;                               /*!< CAM port */
+    uint32_t cam_data_width;                /*!< CAM data width, 8 or 16 or 24 bit, default to 8 */
+    bool bit_swap_en;                       /*!< CAM enable bit swap */
     bool byte_swap_en;                      /*!< CAM enable byte swap */
 } cam_hal_config_t;
 
@@ -67,6 +69,24 @@ void cam_hal_start_streaming(cam_hal_context_t *hal);
  * @return None
  */
 void cam_hal_stop_streaming(cam_hal_context_t *hal);
+
+/**
+ * @brief Configure color format conversion
+ *
+ * This function handles all types of color format conversions:
+ * - YUV to RGB conversion
+ * - RGB to YUV conversion
+ * - YUV to YUV conversion
+ *
+ * Color range support:
+ * - Full range: 0-255 for both RGB and YUV
+ * - Limited range: RGB 16-240, YUV Y:16-240, U-V:16-235
+ *
+ * @param hal    CAM HAL context pointer
+ * @param config Color conversion configuration. If NULL, default config is used.
+ */
+void cam_hal_color_format_convert(cam_hal_context_t *hal,
+                                 const cam_ctlr_format_conv_config_t *config);
 
 #ifdef __cplusplus
 }
