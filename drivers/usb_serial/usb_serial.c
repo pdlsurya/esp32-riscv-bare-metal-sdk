@@ -1,42 +1,96 @@
-#include <stdio.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include "delay.h"
 #include "hal/usb_serial_jtag_ll.h"
 #include "usb_serial.h"
 
-int serial_printf(const char *format, ...)
+static int serial_write_bytes(const char *buf, size_t len)
 {
-    char buf[192];
-    va_list args;
-    va_start(args, format);
-    int size = vsprintf(buf, format, args);
-    int bytes_remaining = size;
-    va_end(args);
-    uint8_t fragments = size % 64 == 0 ? size % 64 : size % 64 + 1;
-    uint16_t timeout = 5600; // in microseconds
+    size_t offset = 0;
 
-    for (int fragment = 0; fragment < fragments; fragment++)
+    if (buf == NULL)
     {
-        for (int i = 0; i < (bytes_remaining >= 64 ? 64 : bytes_remaining); i++)
+        return -1;
+    }
+
+    while (offset < len)
+    {
+        size_t chunk = len - offset;
+        uint16_t timeout = 5600; // in microseconds
+
+        if (chunk > 64U)
+        {
+            chunk = 64U;
+        }
+
+        for (size_t i = 0; i < chunk; i++)
         {
             while ((!USB_SERIAL_JTAG.ep1_conf.serial_in_ep_data_free))
             {
                 delay_us(1);
                 timeout--;
                 if (timeout == 0)
+                {
                     return -1;
+                }
             }
-            USB_SERIAL_JTAG.ep1.rdwr_byte = buf[fragment * 64 + i];
+            USB_SERIAL_JTAG.ep1.rdwr_byte = buf[offset + i];
         }
-        if (bytes_remaining < 64)
+        if (chunk < 64U)
         {
             usb_serial_jtag_ll_txfifo_flush();
         }
 
-        bytes_remaining -= 64;
+        offset += chunk;
     }
+
+    return (int)len;
+}
+
+int serial_write(const char *buf, size_t len)
+{
+    return serial_write_bytes(buf, len);
+}
+
+int serial_vprintf(const char *format, va_list args)
+{
+    char buf[256] = {0};
+    int size;
+
+    if (format == NULL)
+    {
+        return -1;
+    }
+
+    size = vsnprintf(buf, sizeof(buf), format, args);
+    if (size < 0)
+    {
+        return size;
+    }
+    if ((size_t)size >= sizeof(buf))
+    {
+        size = (int)(sizeof(buf) - 1U);
+    }
+
+    if (serial_write_bytes(buf, (size_t)size) < 0)
+    {
+        return -1;
+    }
+
+    return size;
+}
+
+int serial_printf(const char *format, ...)
+{
+    int size;
+    va_list args;
+
+    va_start(args, format);
+    size = serial_vprintf(format, args);
+    va_end(args);
     return size;
 }
 
@@ -48,7 +102,7 @@ int serial_printf(const char *format, ...)
 char *serial_read_string()
 {
     int idx = 0;
-    static char string_buf[192];
+    static char string_buf[256];
     memset(string_buf, 0, sizeof(string_buf));
 
     if (USB_SERIAL_JTAG.ep1_conf.serial_out_ep_data_avail)

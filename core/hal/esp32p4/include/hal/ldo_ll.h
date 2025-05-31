@@ -11,7 +11,7 @@
 #include "soc/chip_revision.h"
 #include "esp_bit_defs.h"
 #include "hal/misc.h"
-#include "hal/efuse_hal.h"
+#include "hal/efuse_ll.h"
 #include "hal/pmu_types.h"
 #include "soc/pmu_struct.h"
 #include "soc/efuse_struct.h"
@@ -76,7 +76,7 @@ static inline void ldo_ll_voltage_to_dref_mul(int ldo_unit, int voltage_mv, uint
     int Vos_1000 = 0;
     int C_1000 = 1000;
 
-    if (efuse_hal_blk_version() >= 1) {
+    if (efuse_ll_get_blk_version() >= 1) {
         // load the calibration values from the eFuse
         if (ldo_unit == 2) {
             efuse_k = EFUSE.rd_mac_sys_3.ldo_vo3_k;
@@ -120,7 +120,7 @@ static inline void ldo_ll_voltage_to_dref_mul(int ldo_unit, int voltage_mv, uint
         }
     }
 
-    if (efuse_hal_blk_version() >= 1) {
+    if (efuse_ll_get_blk_version() >= 1) {
         // For unit0 and unit1, the mul and dref value are calibrated and saved in the efuse, load them when available
         if (ldo_unit == 0 && voltage_mv == 1800) {
             if (EFUSE.rd_mac_sys_2.ldo_vo1_dref && EFUSE.rd_mac_sys_3.ldo_vo1_mul) {
@@ -205,7 +205,7 @@ __attribute__((always_inline))
 static inline void ldo_ll_enable(int ldo_unit, bool enable)
 {
     uint8_t index_array[LDO_LL_NUM_UNITS] = {0, 3, 1, 4};
-    if (ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 100) && (ldo_unit == 0)) {
+    if (ESP_CHIP_REV_ABOVE(efuse_ll_get_chip_revision(), 100) && (ldo_unit == 0)) {
         // If chip_rev >= v1.0, slp_mem_dbias[3] is used to control the volt output of VO1.
         PMU.hp_sys[PMU_MODE_HP_ACTIVE].regulator0.xpd_0p1a = (enable ? 8 : 0);
     }
