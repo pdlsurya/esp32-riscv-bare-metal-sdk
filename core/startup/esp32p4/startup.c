@@ -41,6 +41,25 @@ extern int main(void); // User's main function
 
 static entry_func_t core1_main_func;
 
+static __attribute__((noreturn, used)) void startup_main(void);
+static __attribute__((noreturn, used)) void core1_startup_main(void);
+
+static inline void copy_words(uint32_t *pDst, const uint32_t *pSrc, const uint32_t *pEnd)
+{
+    while (pDst < pEnd)
+    {
+        *pDst++ = *pSrc++;
+    }
+}
+
+static inline void zero_words(uint32_t *pDst, const uint32_t *pEnd)
+{
+    while (pDst < pEnd)
+    {
+        *pDst++ = 0;
+    }
+}
+
 static inline void cpu_init()
 {
     rv_utils_set_mtvec((uint32_t)&exception_handler); // Set the mtvec register with the address of the exception handler
@@ -54,43 +73,6 @@ static inline void cpu_init()
     rv_utils_enable_fpu();
 
     rv_utils_intr_global_enable();
-}
-
-/**
- * @brief Set core 1 stack pointer and jump to user's main function of core 1
- *
- */
-void core1_reset_handler(void)
-{
-
-    asm volatile("la sp, core1_stack + %0" ::"i"(CORE1_STACK_SIZE)); // Load the stack pointer
-
-    cpu_init();
-
-    ets_set_appcpu_boot_addr(0);
-
-    // Jump to user's main function
-    core1_main_func();
-}
-
-/**
- * @brief Starts the application CPU (core 1) and executes the given entry function.
- *
- * This function sets the application CPU's boot address to the given entry function,
- * enables the application CPU's clock and resets the application CPU, and then
- * unstalls the application CPU.
- *
- * @param[in] entry_func The entry function to execute on the application CPU.
- */
-void core1_start(entry_func_t entry_func)
-{
-    core1_main_func = entry_func;
-
-    ets_set_appcpu_boot_addr((uint32_t)core1_reset_handler);
-
-    cpu_utility_ll_unstall_cpu(1);
-
-    cpu_utility_ll_enable_clock_and_reset_app_cpu();
 }
 
 /**
@@ -123,37 +105,16 @@ static void watchdog_disable()
     (&LP_WDT)->swd_wprotect.swd_wkey = 0;
 }
 
-__attribute__((noreturn, used)) static void reset_handler(void)
+static __attribute__((noreturn, used)) void startup_main(void)
 {
-
     cpu_init();
 
     // Disable watchdog timers
     watchdog_disable();
 
-    uint32_t *data_src = &__data_load;
-    uint32_t *data_dest = &__data_start;
-
-    // Copy the data segment
-    while (data_dest < &__data_end)
-    {
-        *data_dest++ = *data_src++;
-    }
-
-    uint32_t *tcm_dst = &__tcm_start;
-    uint32_t *tcm_src = &__tcm_load;
-    // Copy TCM segment
-    while (tcm_dst < &__tcm_end)
-    {
-        *tcm_dst++ = *tcm_src++;
-    }
-
-    // Zero initialize the BSS section
-    uint32_t *bss = &__bss_start;
-    while (bss < &__bss_end)
-    {
-        *bss++ = 0;
-    }
+    copy_words(&__data_start, &__data_load, &__data_end);
+    copy_words(&__tcm_start, &__tcm_load, &__tcm_end);
+    zero_words(&__bss_start, &__bss_end);
 
     /* Jump to the main function */
     main();
@@ -164,6 +125,50 @@ __attribute__((noreturn, used)) static void reset_handler(void)
     }
 }
 
+static __attribute__((noreturn, used)) void core1_startup_main(void)
+{
+    cpu_init();
+
+    ets_set_appcpu_boot_addr(0);
+
+    // Jump to user's main function
+    core1_main_func();
+
+    while (1)
+    {
+    }
+}
+
+/**
+ * @brief Set core 1 stack pointer and jump to user's main function of core 1
+ *
+ */
+__attribute__((naked, noreturn, used)) void core1_reset_handler(void)
+{
+    asm volatile("la sp, core1_stack + %0\n"
+                 "j core1_startup_main\n" : : "i"(CORE1_STACK_SIZE));
+}
+
+/**
+ * @brief Starts the application CPU (core 1) and executes the given entry function.
+ *
+ * This function sets the application CPU's boot address to the given entry function,
+ * enables the application CPU's clock and resets the application CPU, and then
+ * unstalls the application CPU.
+ *
+ * @param[in] entry_func The entry function to execute on the application CPU.
+ */
+void core1_start(entry_func_t entry_func)
+{
+    core1_main_func = entry_func;
+
+    ets_set_appcpu_boot_addr((uint32_t)core1_reset_handler);
+
+    cpu_utility_ll_unstall_cpu(1);
+
+    cpu_utility_ll_enable_clock_and_reset_app_cpu();
+}
+
 /**
  * @brief Entry Point: Setup vector table, stack pointer and call reset handler
  *
@@ -172,5 +177,5 @@ __attribute__((section(".entry"), naked, noreturn, used)) void _start(void)
 {
 
     asm volatile("la sp, __stack_top\n"
-                 "j reset_handler"); // Load the stack pointer
+                 "j startup_main"); // Load the stack pointer
 }
