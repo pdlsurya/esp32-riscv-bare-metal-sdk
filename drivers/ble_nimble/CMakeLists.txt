@@ -5,6 +5,10 @@ endif()
 set(BLE_NIMBLE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(BLE_NIMBLE_THIRD_PARTY ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/esp-nimble)
 
+if(NOT EXISTS ${BLE_NIMBLE_THIRD_PARTY}/nimble/host/src/ble_hs.c)
+    message(FATAL_ERROR "Missing esp-nimble sources at ${BLE_NIMBLE_THIRD_PARTY}. Run: git submodule update --init --recursive")
+endif()
+
 file(GLOB BLE_NIMBLE_HOST_SOURCES CONFIGURE_DEPENDS
     ${BLE_NIMBLE_THIRD_PARTY}/nimble/host/src/*.c)
 file(GLOB BLE_NIMBLE_TINYCRYPT_SOURCES CONFIGURE_DEPENDS
