@@ -37,4 +37,14 @@ function(sdk_config target)
     # Link the SDK
     target_link_libraries(${target} PRIVATE esp32_rv_sdk)
 
+    # The SDK currently exposes many sources as PUBLIC on esp32_rv_sdk, so some
+    # consumers compile SDK sources directly as part of their own target. Recent
+    # esp-nimble revisions use esp_err_t from transport/host sources without
+    # including esp_err.h themselves, so inject it here for C compilation on
+    # consumer targets as well.
+    target_compile_options(${target} PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:-include>
+        $<$<COMPILE_LANGUAGE:C>:esp_err.h>
+    )
+
 endfunction(sdk_config)
