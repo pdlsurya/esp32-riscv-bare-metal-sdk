@@ -13,7 +13,7 @@ set(CMAKE_CPP riscv32-esp-elf-cpp)
 set(CMAKE_LINKER riscv32-esp-elf-ld)
 
 # Define flags
-set(CMAKE_C_FLAGS "-march=rv32imac_zicsr_zifencei -mabi=ilp32 -nostartfiles  -Wno-unused-variable -Wno-unused-parameter -fdata-sections -ffunction-sections -fno-strict-aliasing  -fshort-enums -fno-builtin -O2")
+set(CMAKE_C_FLAGS "-march=rv32imac_zicsr_zifencei -mabi=ilp32 -nostartfiles  -Wno-unused-variable -Wno-unused-parameter -fdata-sections -ffunction-sections -fno-strict-aliasing  -fshort-enums -fno-builtin")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS} -x assembler-with-cpp")
 
 add_link_options("SHELL:-Wl,--gc-sections --specs=nano.specs --specs=nosys.specs")
