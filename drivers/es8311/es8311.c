@@ -606,11 +606,11 @@ void es8311_register_dump(es8311_dev_t *dev)
         uint8_t value = 0;
         if (es8311_read_register(dev, reg, &value) == ES8311_OK)
         {
-            serial_printf("ES8311 REG[0x%02X] = 0x%02X\r\n", reg, value);
+            printf("ES8311 REG[0x%02X] = 0x%02X\r\n", reg, value);
         }
         else
         {
-            serial_printf("ES8311 REG[0x%02X] read failed\r\n", reg);
+            printf("ES8311 REG[0x%02X] read failed\r\n", reg);
             break;
         }
     }

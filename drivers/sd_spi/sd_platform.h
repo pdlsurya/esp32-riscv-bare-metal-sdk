@@ -71,7 +71,7 @@ extern "C"
 #endif
 
 #ifndef PRINTF
-#define PRINTF(...) serial_printf(__VA_ARGS__)
+#define PRINTF(...) printf(__VA_ARGS__)
 #endif
 
 #define sd_cs_select() gpio_ll_set_level(&GPIO, SD_SPI_PIN_CS, 0)
