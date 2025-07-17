@@ -16,10 +16,9 @@ set(CMAKE_LINKER riscv32-esp-elf-ld)
 set(CMAKE_C_FLAGS "-march=rv32imafc_zicsr_zifencei -mabi=ilp32f -nostartfiles  -Wno-unused-variable -Wno-unused-parameter -fdata-sections -ffunction-sections -fno-strict-aliasing  -fshort-enums -fno-builtin -O2")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS} -x assembler-with-cpp")
 
-add_link_options("SHELL:-Wl,--gc-sections --specs=nano.specs --specs=nosys.specs")
+add_link_options("SHELL:-Wl,--gc-sections -u _printf_float --specs=nano.specs --specs=nosys.specs")
 
 # Optional: Set objcopy and size utilities
 set(CMAKE_OBJCOPY riscv32-esp-elf-objcopy)
 set(CMAKE_OBJDUMP riscv32-esp-elf-objdump)
 set(CMAKE_SIZE riscv32-esp-elf-size)
-
