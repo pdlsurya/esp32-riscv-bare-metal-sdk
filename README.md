@@ -4,12 +4,12 @@ A minimal bare-metal SDK for the ESP32-C6 RISC-V microcontroller, developed with
 
 ## Features
 
-- 🚫 No ESP-IDF dependency
-- 🧱 Direct register-level programming
-- ⚙️ Custom linker scripts and startup code
-- 🧪 Example applications (e.g., Blinky)
-- 💡 Support for WS2812 LEDs
-- 🛠️ Compatible with CMake and Ninja build systems
+- No ESP-IDF dependency
+- Uses direct boot mode(No second stage bootloader required)
+- Direct register-level programming
+- Custom linker scripts and startup code
+- Example applications (e.g., Blinky)
+- Compatible with CMake and Ninja build systems
 
 ## Prerequisites
 
