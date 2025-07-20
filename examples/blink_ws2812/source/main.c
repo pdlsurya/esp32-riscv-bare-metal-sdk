@@ -1,9 +1,9 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "delay.h"
 #include "gpio_drv.h"
-#include "usb_serial.h"
 #include "ws2812.h"
 
 #define LED_GPIO_PIN 2U
