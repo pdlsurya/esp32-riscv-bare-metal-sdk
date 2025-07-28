@@ -1,0 +1,11 @@
+.git
+.DS_Store
+**/.DS_Store
+**/build/
+**/build-*/
+**/build_*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/compile_commands.json
+**/Makefile
