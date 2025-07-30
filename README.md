@@ -171,8 +171,10 @@ docker run --rm -it \
   -v /absolute/path/to/esp32-rv-bare-metal-sdk:/work/sdk \
   -w /work/app \
   esp32-rv-sdk \
-  bash -lc 'cmake -S . -B build -GNinja -DSDK_PATH=/work/sdk && cmake --build build'
+  bash -lc 'cmake -S . -B build-docker -GNinja -DSDK_PATH=/work/sdk && cmake --build build-docker'
 ```
+
+Use a separate Docker build directory such as `build-docker/` so container builds do not reuse a host-generated `build/` cache with absolute host paths.
 
 If your project depends on other local components such as an RTOS or board library, mount them as additional volumes and pass matching `-D..._PATH=/work/...` arguments during CMake configure. For example:
 
@@ -183,5 +185,5 @@ docker run --rm -it \
   -v /absolute/path/to/sanoRTOS:/work/sanoRTOS \
   -w /work/app \
   esp32-rv-sdk \
-  bash -lc 'cmake -S . -B build -GNinja -DSDK_PATH=/work/sdk -DSANORTOS_PATH=/work/sanoRTOS && cmake --build build'
+  bash -lc 'cmake -S . -B build-docker -GNinja -DSDK_PATH=/work/sdk -DSANORTOS_PATH=/work/sanoRTOS && cmake --build build-docker'
 ```
