@@ -32,11 +32,6 @@
 #include "sdmmc.h"
 #elif SDFAT32_SD_BACKEND == SDFAT32_SD_BACKEND_SPI
 #include "sd_spi.h"
-#elif SDFAT32_SD_BACKEND == SDFAT32_SD_BACKEND_USB_MSC
-#if !defined(TARGET_SOC_ESP32P4)
-#error "SDFAT32_SD_BACKEND_USB_MSC currently requires ESP32P4"
-#endif
-#include "usb_msc.h"
 #else
 #error "Invalid SDFAT32_SD_BACKEND selection"
 #endif
@@ -57,31 +52,6 @@
 #define SDFAT32_SD_READ_SECTOR(lba, buf) (sd_read_sector((lba), (buf)) == SD_READ_SUCCESS)
 #define SDFAT32_SD_WRITE_SECTOR(lba, buf) (sd_write_sector((lba), (uint8_t *)(buf)) == SD_WRITE_SUCCESS)
 #define SDFAT32_SD_SECTOR_SIZE() (512U)
-#elif SDFAT32_SD_BACKEND == SDFAT32_SD_BACKEND_USB_MSC
-
-#if !defined(SDFAT32_USB_MSC_VBUS_POWER_CB)
-__attribute__((weak)) void sdfat32_usb_msc_vbus_power(bool enable)
-{
-	(void)enable;
-}
-#endif
-
-static bool sdfat32_usb_msc_init(void)
-{
-	usb_msc_config_t cfg = USB_MSC_DEFAULT_CONFIG();
-#if defined(SDFAT32_USB_MSC_VBUS_POWER_CB)
-	cfg.vbus_power_cb = SDFAT32_USB_MSC_VBUS_POWER_CB;
-#else
-	cfg.vbus_power_cb = sdfat32_usb_msc_vbus_power;
-#endif
-	return (usb_msc_init(&cfg) == USB_MSC_OK);
-}
-
-#define SDFAT32_SD_INIT() (sdfat32_usb_msc_init())
-#define SDFAT32_SD_READ_SECTOR(lba, buf) (usb_msc_read_sector((lba), (buf)) == USB_MSC_OK)
-/* USB MSC backend is read-only for now. */
-#define SDFAT32_SD_WRITE_SECTOR(lba, buf) (false)
-#define SDFAT32_SD_SECTOR_SIZE() (usb_msc_sector_size())
 #endif
 
 static uint32_t bootSecStartLba;
@@ -100,6 +70,16 @@ static uint32_t DataSectorsCnt;
 
 static char *months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
+static uint8_t fileNameLength(const char *filename);
+static bool mixedLetters(const char *filename);
+char *fileGetExtension(const char *file_name);
+
+static uint16_t readLe16(const void *ptr)
+{
+	const uint8_t *p = (const uint8_t *)ptr;
+	return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
+}
+
 static uint32_t readLe32(const uint8_t *p)
 {
 	return ((uint32_t)p[0]) |
@@ -107,6 +87,186 @@ static uint32_t readLe32(const uint8_t *p)
 		   ((uint32_t)p[2] << 16) |
 		   ((uint32_t)p[3] << 24);
 }
+
+static void writeLe16(void *ptr, uint16_t value)
+{
+	uint8_t *p = (uint8_t *)ptr;
+	p[0] = (uint8_t)(value & 0xFF);
+	p[1] = (uint8_t)(value >> 8);
+}
+
+static bool utf8DecodeNext(const char **src, uint32_t *codepoint)
+{
+	const uint8_t *s = (const uint8_t *)*src;
+
+	if (s[0] == 0)
+	{
+		return false;
+	}
+
+	if (s[0] < 0x80)
+	{
+		*codepoint = s[0];
+		*src += 1;
+		return true;
+	}
+
+	if ((s[0] & 0xE0) == 0xC0 && (s[1] & 0xC0) == 0x80)
+	{
+		uint32_t cp = ((uint32_t)(s[0] & 0x1F) << 6) | (uint32_t)(s[1] & 0x3F);
+		if (cp >= 0x80)
+		{
+			*codepoint = cp;
+			*src += 2;
+			return true;
+		}
+	}
+
+	if ((s[0] & 0xF0) == 0xE0 && (s[1] & 0xC0) == 0x80 && (s[2] & 0xC0) == 0x80)
+	{
+		uint32_t cp = ((uint32_t)(s[0] & 0x0F) << 12) |
+					  ((uint32_t)(s[1] & 0x3F) << 6) |
+					  (uint32_t)(s[2] & 0x3F);
+		if (cp >= 0x800 && !(cp >= 0xD800 && cp <= 0xDFFF))
+		{
+			*codepoint = cp;
+			*src += 3;
+			return true;
+		}
+	}
+
+	if ((s[0] & 0xF8) == 0xF0 && (s[1] & 0xC0) == 0x80 && (s[2] & 0xC0) == 0x80 && (s[3] & 0xC0) == 0x80)
+	{
+		uint32_t cp = ((uint32_t)(s[0] & 0x07) << 18) |
+					  ((uint32_t)(s[1] & 0x3F) << 12) |
+					  ((uint32_t)(s[2] & 0x3F) << 6) |
+					  (uint32_t)(s[3] & 0x3F);
+		if (cp >= 0x10000 && cp <= 0x10FFFF)
+		{
+			*codepoint = cp;
+			*src += 4;
+			return true;
+		}
+	}
+
+	*codepoint = '?';
+	*src += 1;
+	return true;
+}
+
+static size_t utf8Encode(char *dst, size_t dstSize, uint32_t codepoint)
+{
+	if (dstSize == 0)
+	{
+		return 0;
+	}
+
+	if (codepoint <= 0x7F)
+	{
+		if (dstSize < 1)
+		{
+			return 0;
+		}
+		dst[0] = (char)codepoint;
+		return 1;
+	}
+
+	if (codepoint <= 0x7FF)
+	{
+		if (dstSize < 2)
+		{
+			return 0;
+		}
+		dst[0] = (char)(0xC0 | (codepoint >> 6));
+		dst[1] = (char)(0x80 | (codepoint & 0x3F));
+		return 2;
+	}
+
+	if (codepoint <= 0xFFFF)
+	{
+		if (dstSize < 3)
+		{
+			return 0;
+		}
+		dst[0] = (char)(0xE0 | (codepoint >> 12));
+		dst[1] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+		dst[2] = (char)(0x80 | (codepoint & 0x3F));
+		return 3;
+	}
+
+	if (dstSize < 4)
+	{
+		return 0;
+	}
+	dst[0] = (char)(0xF0 | (codepoint >> 18));
+	dst[1] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+	dst[2] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+	dst[3] = (char)(0x80 | (codepoint & 0x3F));
+	return 4;
+}
+
+static uint8_t *lfnEntryNameSlot(LFN_entry_t *entry, uint8_t index)
+{
+	if (index < 5)
+	{
+		return (uint8_t *)&entry->LDIR_Name1[index * 2];
+	}
+	if (index < 11)
+	{
+		return (uint8_t *)&entry->LDIR_Name2[(index - 5) * 2];
+	}
+	return (uint8_t *)&entry->LDIR_Name3[(index - 11) * 2];
+}
+
+static uint16_t lfnReadNameSlot(LFN_entry_t *entry, uint8_t index)
+{
+	return readLe16(lfnEntryNameSlot(entry, index));
+}
+
+static void lfnWriteNameSlot(LFN_entry_t *entry, uint8_t index, uint16_t value)
+{
+	writeLe16(lfnEntryNameSlot(entry, index), value);
+}
+
+static uint16_t utf8ToUtf16(const char *src, uint16_t *dst, uint16_t dstUnits)
+{
+	uint16_t units = 0;
+	uint32_t cp;
+
+	while (utf8DecodeNext(&src, &cp) && units < dstUnits)
+	{
+		if (cp > 0xFFFF)
+		{
+			if ((uint16_t)(units + 1) >= dstUnits)
+			{
+				break;
+			}
+			cp -= 0x10000;
+			dst[units++] = (uint16_t)(0xD800 | (cp >> 10));
+			dst[units++] = (uint16_t)(0xDC00 | (cp & 0x3FF));
+		}
+		else
+		{
+			dst[units++] = (uint16_t)cp;
+		}
+	}
+
+	return units;
+}
+
+static bool filenameNeedsLfn(const char *filename)
+{
+	for (const uint8_t *p = (const uint8_t *)filename; *p != 0; p++)
+	{
+		if (*p >= 0x80)
+		{
+			return true;
+		}
+	}
+
+	return mixedLetters(filename) || (fileNameLength(filename) > 8) || (strlen(fileGetExtension(filename)) > 3);
+}
+
 
 bool mbrGetPartitionStartLba(uint8_t *mbr, int partIndex, uint32_t *startLba)
 {
@@ -354,8 +514,8 @@ static bool dirNextEntryExists(uint32_t *entryIndex, uint8_t *sectorIndex, uint3
  */
 char *fileGetName(file *pFile)
 {
-	static char fileName[128];
-	uint8_t nameIndx = 0;
+	static char fileName[512];
+	size_t nameIndx = 0;
 
 	memset(fileName, 0, sizeof(fileName)); // Clear the file name buffer
 
@@ -366,26 +526,28 @@ char *fileGetName(file *pFile)
 		uint8_t sectorIndex = pFile->fileEntInf.lfnEntrySectorIndex;
 		uint32_t entryIndex = pFile->fileEntInf.lfnEntryIndex;
 
-		char (*tempName)[13] = (char (*)[13])fileName;
+		uint16_t nameUtf16[255];
+		memset(nameUtf16, 0, sizeof(nameUtf16));
+
+		SDFAT32_SD_READ_SECTOR(startSectorOfCluster(currentCluster) + sectorIndex, sdBuffer);
 
 		while (lfnEntryCnt) // Loop until all long filename entries are processed
 		{
-			uint8_t tempNameIndex = 0;												 // Initialize the temporary name index
 			LFN_entry_t *entry = (LFN_entry_t *)(sdBuffer + (entryIndex % 16) * 32); // Get the long filename entry at the current index
+			uint8_t ordinal = entry->LDIR_Ord & 0x1F;
 
-			for (uint8_t i = 0; i < 10; i += 2)
-			{ // Copy the characters from the long filename entry to the temporary name array
-				tempName[lfnEntryCnt - 1][tempNameIndex++] = entry->LDIR_Name1[i];
-			}
-
-			for (uint8_t i = 0; i < 12; i += 2)
+			if (ordinal > 0)
 			{
-				tempName[lfnEntryCnt - 1][tempNameIndex++] = entry->LDIR_Name2[i];
-			}
-
-			for (uint8_t i = 0; i < 4; i += 2)
-			{
-				tempName[lfnEntryCnt - 1][tempNameIndex++] = entry->LDIR_Name3[i];
+				uint16_t baseIndex = (uint16_t)(ordinal - 1) * 13;
+				for (uint8_t i = 0; i < 13 && (baseIndex + i) < 255; i++)
+				{
+					uint16_t ch = lfnReadNameSlot(entry, i);
+					if (ch == 0x0000 || ch == 0xFFFF)
+					{
+						break;
+					}
+					nameUtf16[baseIndex + i] = ch;
+				}
 			}
 
 			lfnEntryCnt--;
@@ -394,6 +556,27 @@ char *fileGetName(file *pFile)
 			{
 				break;
 			}
+		}
+
+		for (uint16_t i = 0; i < 255 && nameUtf16[i] != 0; i++)
+		{
+			uint32_t cp = nameUtf16[i];
+			if (cp >= 0xD800 && cp <= 0xDBFF && (i + 1) < 255 && nameUtf16[i + 1] >= 0xDC00 && nameUtf16[i + 1] <= 0xDFFF)
+			{
+				cp = 0x10000 + (((cp - 0xD800) << 10) | (nameUtf16[i + 1] - 0xDC00));
+				i++;
+			}
+			else if (cp >= 0xD800 && cp <= 0xDFFF)
+			{
+				cp = '?';
+			}
+
+			size_t written = utf8Encode(&fileName[nameIndx], sizeof(fileName) - nameIndx - 1, cp);
+			if (written == 0)
+			{
+				break;
+			}
+			nameIndx += written;
 		}
 	}
 	else
@@ -445,11 +628,11 @@ char *fileGetName(file *pFile)
  */
 char *fileGetExtension(const char *file_name)
 {
-	static char ext[5] = ""; /**< Buffer to store the file extension. */
+	static char ext[256] = ""; /**< Buffer to store the file extension. */
 
 	memset(ext, 0, sizeof(ext)); /**< Clear the buffer. */
 
-	uint8_t idx = 0; /**< Index of the current character in the file name. */
+	size_t idx = 0; /**< Index of the current character in the file name. */
 
 	// Loop until we reach the dot (.) or the end of the string.
 	while (file_name[idx] != '.')
@@ -457,14 +640,14 @@ char *fileGetExtension(const char *file_name)
 		idx++;
 
 		// If we have reached the end of the string without finding a dot, return an empty string.
-		if (idx == strlen(file_name))
+		if (file_name[idx] == '\0')
 		{
 			return ext;
 		}
 	}
 
 	// Copy the characters after the dot to the ext buffer.
-	strcpy(ext, &file_name[idx + 1]);
+	strncpy(ext, &file_name[idx + 1], sizeof(ext) - 1);
 
 	return ext;
 }
@@ -1366,7 +1549,7 @@ static file fileCreate(file *pathDir, const char *filename, bool isDir)
 	uint8_t lfnEntCnt;
 
 	// Check if filename requires long file name (LFN) entries
-	if (mixedLetters(filename) || (fileNameLength(filename) > 8) || (strlen(fileGetExtension(filename)) > 3))
+	if (filenameNeedsLfn(filename))
 	{
 		for (uint8_t i = 0; i < strlen(filename); i++)
 		{
@@ -1384,7 +1567,7 @@ static file fileCreate(file *pathDir, const char *filename, bool isDir)
 				}
 				else
 				{
-					newFile.DIR_Name[i] = filename[i];
+					newFile.DIR_Name[i] = (((uint8_t)filename[i]) < 0x80) ? filename[i] : '_';
 				}
 			}
 			if (fileNameLength(filename) > 8)
@@ -1401,14 +1584,15 @@ static file fileCreate(file *pathDir, const char *filename, bool isDir)
 			}
 			newFile.DIR_ext[i] = filename[tempIndx + i] - 32;
 		}
-		lfnEntCnt = strlen(filename) / 13;
+		uint16_t nameUtf16[255];
+		uint16_t nameUtf16Units = utf8ToUtf16(filename, nameUtf16, 255);
+		lfnEntCnt = nameUtf16Units / 13;
 
-		if ((strlen(filename) % 13) != 0)
+		if ((nameUtf16Units % 13) != 0)
 		{
 			lfnEntCnt += 1;
 		}
 
-		uint8_t nameIndex = 0;
 		uint8_t lfnEntCntTemp = lfnEntCnt;
 
 		// Get free entry for LFN and file entry
@@ -1440,26 +1624,22 @@ static file fileCreate(file *pathDir, const char *filename, bool isDir)
 				entry->LDIR_Ord |= 0x40;
 			}
 
-			for (uint8_t i = 0; i < 10; i += 2)
+			uint16_t unitBase = (uint16_t)(entry->LDIR_Ord & 0x1F) - 1;
+			unitBase *= 13;
+
+			for (uint8_t i = 0; i < 13; i++)
 			{
-				if (filename[nameIndex] != 0)
+				uint16_t unitIndex = unitBase + i;
+				uint16_t value = 0xFFFF;
+				if (unitIndex < nameUtf16Units)
 				{
-					entry->LDIR_Name1[i] = filename[nameIndex++];
+					value = nameUtf16[unitIndex];
 				}
-			}
-			for (uint8_t i = 0; i < 12; i += 2)
-			{
-				if (filename[nameIndex] != 0)
+				else if (unitIndex == nameUtf16Units)
 				{
-					entry->LDIR_Name2[i] = filename[nameIndex++];
+					value = 0x0000;
 				}
-			}
-			for (uint8_t i = 0; i < 4; i += 2)
-			{
-				if (filename[nameIndex] != 0)
-				{
-					entry->LDIR_Name3[i] = filename[nameIndex++];
-				}
+				lfnWriteNameSlot(entry, i, value);
 			}
 
 			lfnEntCnt--;
@@ -1821,16 +2001,7 @@ bool fileDelete(const char *path, const char *filename)
 		return false;
 	}
 
-	// Calculate the number of LFN entries if the filename is long
-	uint8_t lfnEntCnt = 0;
-	if (mixedLetters(filename) || (fileNameLength(filename) > 8))
-	{
-		lfnEntCnt = strlen(filename) / 13;
-		if ((strlen(filename) % 13) != 0)
-		{
-			lfnEntCnt += 1;
-		}
-	}
+	uint8_t lfnEntCnt = tempFile.fileEntInf.LFN_EntCnt;
 
 	// Read the sector containing the file entry
 	if (SDFAT32_SD_READ_SECTOR(startSectorOfCluster(tempFile.fileEntInf.Cluster) + tempFile.fileEntInf.sectorIndex, sdBuffer))
