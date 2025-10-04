@@ -105,4 +105,4 @@ typedef union
 
 void ws2812_init();
 
-void ws2812_send(ws2812_color_t color);
+void ws2812_write(ws2812_color_t color);
