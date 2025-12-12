@@ -8,17 +8,17 @@
 
 #include <stdbool.h>
 #include "soc/soc_caps.h"
-#if SOC_USB_OTG_SUPPORTED
+#if (SOC_USB_OTG_PERIPH_NUM > 0)
 #include "soc/usb_wrap_struct.h"
 #include "hal/usb_wrap_ll.h"
-#endif
+#endif // (SOC_USB_OTG_PERIPH_NUM > 0)
 #include "hal/usb_wrap_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if SOC_USB_OTG_SUPPORTED
+#if (SOC_USB_OTG_PERIPH_NUM > 0)
 
 /**
  * @brief HAL context type of USB WRAP driver
@@ -32,7 +32,30 @@ typedef struct {
  *
  * @param hal USB WRAP HAL context
  */
-void usb_wrap_hal_init(usb_wrap_hal_context_t *hal);
+void _usb_wrap_hal_init(usb_wrap_hal_context_t *hal);
+
+#if SOC_RCC_IS_INDEPENDENT
+#define usb_wrap_hal_init(...)   _usb_wrap_hal_init(__VA_ARGS__)
+#else
+// Use a macro to wrap the function, force the caller to use it in a critical section
+// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
+#define usb_wrap_hal_init(...) do {(void)__DECLARE_RCC_ATOMIC_ENV; _usb_wrap_hal_init(__VA_ARGS__);} while(0)
+#endif
+
+/**
+ * @brief Disable USB WRAP
+ *
+ * Disable clock to the peripheral
+ */
+void _usb_wrap_hal_disable(void);
+
+#if SOC_RCC_IS_INDEPENDENT
+#define usb_wrap_hal_disable(...)   _usb_wrap_hal_disable(__VA_ARGS__)
+#else
+// Use a macro to wrap the function, force the caller to use it in a critical section
+// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
+#define usb_wrap_hal_disable(...) do {(void)__DECLARE_RCC_ATOMIC_ENV; _usb_wrap_hal_disable(__VA_ARGS__);} while(0)
+#endif
 
 /* ---------------------------- USB PHY Control  ---------------------------- */
 
@@ -89,7 +112,7 @@ static inline void usb_wrap_hal_phy_test_mode_set_signals(usb_wrap_hal_context_t
     usb_wrap_ll_phy_test_mode_set_signals(hal->dev, vals);
 }
 
-#endif // SOC_USB_OTG_SUPPORTED
+#endif // (SOC_USB_OTG_PERIPH_NUM > 0)
 
 #ifdef __cplusplus
 }

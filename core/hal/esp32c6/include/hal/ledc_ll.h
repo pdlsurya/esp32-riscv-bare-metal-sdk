@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,6 +16,7 @@
 #include "soc/clk_tree_defs.h"
 #include "hal/assert.h"
 #include "esp_rom_sys.h"    //for sync issue workaround
+#include "soc/soc_caps.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,15 +39,25 @@ extern "C" {
  *
  * @param enable    Enable/Disable
  */
-static inline void ledc_ll_enable_bus_clock(bool enable) {
+static inline void ledc_ll_enable_bus_clock(bool enable)
+{
     PCR.ledc_conf.ledc_clk_en = enable;
 }
 
 /**
  * @brief Reset whole peripheral register to init value defined by HW design
  */
-static inline void ledc_ll_enable_reset_reg(bool enable) {
+static inline void ledc_ll_enable_reset_reg(bool enable)
+{
     PCR.ledc_conf.ledc_rst_en = enable;
+}
+
+/**
+ * @brief Enable the power for LEDC memory block
+ */
+static inline void ledc_ll_enable_mem_power(bool enable)
+{
+    // No register to control the power for LEDC memory block on C6
 }
 
 /**
@@ -442,6 +453,7 @@ static inline void ledc_ll_set_duty_range_wr_addr(ledc_dev_t *hw, ledc_mode_t sp
  */
 static inline void ledc_ll_set_fade_param_range(ledc_dev_t *hw, ledc_mode_t speed_mode, ledc_channel_t channel_num, uint8_t range, uint32_t dir, uint32_t cycle, uint32_t scale, uint32_t step)
 {
+    HAL_ASSERT(range < SOC_LEDC_GAMMA_CURVE_FADE_RANGE_MAX);
     // To workaround sync issue
     // This is to ensure the fade param write to the gamma_wr register would not mess up the last wr_addr
     ledc_ll_set_duty_range_wr_addr(hw, speed_mode, channel_num, range);
@@ -539,7 +551,7 @@ static inline void ledc_ll_get_fade_param(ledc_dev_t *hw, ledc_mode_t speed_mode
 static inline void ledc_ll_get_fade_param_range(ledc_dev_t *hw, ledc_mode_t speed_mode, ledc_channel_t channel_num, uint8_t range, uint32_t *dir, uint32_t *cycle, uint32_t *scale, uint32_t *step)
 {
     // On ESP32C6/H2, gamma ram read/write has the APB and LEDC clock domain sync issue
-    // To make sure the parameter read is from the correct gamma ram addr, add a delay in between to ensure syncronization
+    // To make sure the parameter read is from the correct gamma ram addr, add a delay in between to ensure synchronization
     ledc_ll_set_duty_range_rd_addr(hw, speed_mode, channel_num, range);
     esp_rom_delay_us(5);
     ledc_ll_get_fade_param(hw, speed_mode, channel_num, dir, cycle, scale, step);
@@ -567,13 +579,12 @@ static inline void ledc_ll_set_sig_out_en(ledc_dev_t *hw, ledc_mode_t speed_mode
  * @param hw Beginning address of the peripheral registers
  * @param speed_mode LEDC speed_mode, low-speed mode only
  * @param channel_num LEDC channel index (0-5), select from ledc_channel_t
- * @param duty_start The duty start
  *
  * @return None
  */
-static inline void ledc_ll_set_duty_start(ledc_dev_t *hw, ledc_mode_t speed_mode, ledc_channel_t channel_num, bool duty_start)
+static inline void ledc_ll_set_duty_start(ledc_dev_t *hw, ledc_mode_t speed_mode, ledc_channel_t channel_num)
 {
-    hw->channel_group[speed_mode].channel[channel_num].conf1.duty_start = duty_start;
+    hw->channel_group[speed_mode].channel[channel_num].conf1.duty_start = 1;
 }
 
 /**

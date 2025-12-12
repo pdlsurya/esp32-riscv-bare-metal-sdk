@@ -22,6 +22,8 @@ extern "C" {
 #include "esp_attr.h"
 #include "esp_assert.h"
 
+#include "esp32c6/rom/ets_sys.h"
+
 /* The value that needs to be written to LP_WDT_WPROTECT_REG to write-enable the wdt registers */
 #define LP_WDT_WKEY_VALUE 0x50D83AA1
 /* The value that needs to be written to LP_WDT_SWD_WPROTECT_REG to write-enable the swd registers */
@@ -267,7 +269,6 @@ FORCE_INLINE_ATTR void lpwdt_ll_set_chip_reset_width(lp_wdt_dev_t *hw, uint32_t 
 FORCE_INLINE_ATTR void lpwdt_ll_feed(lp_wdt_dev_t *hw)
 {
     hw->feed.rtc_wdt_feed = 1;
-
 }
 
 /**

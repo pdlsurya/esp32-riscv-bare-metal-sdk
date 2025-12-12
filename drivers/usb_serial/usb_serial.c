@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include "delay.h"
 #include "hal/usb_serial_jtag_ll.h"
+#include "usb_serial.h"
 
 int serial_printf(const char *format, ...)
 {

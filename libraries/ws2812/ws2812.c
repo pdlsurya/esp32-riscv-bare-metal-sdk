@@ -5,8 +5,13 @@
 #include "spi_drv.h"
 #include "ws2812.h"
 
-#define WS2812_PIN 8
+#if defined(TARGET_SOC_ESP32P4)
+#define RMT_SIG 246
+#define WS2812_PIN 23
+#elif defined(TARGET_SOC_ESP32C6)
 #define RMT_SIG 71
+#define WS2812_PIN 8
+#endif
 
 #define WS2812_BRIGHTNESS 0.5
 
@@ -19,12 +24,11 @@
 #define WS2812_T0L RMT_US_TO_CLK_CYCLES(0.8)
 #define WS2812_RESET RMT_US_TO_CLK_CYCLES(50)
 
-static spi_device_handle_t spi_dev;
+static spi_dev_handle_t spi_dev;
 
 static void rmt_gpio_config()
 {
-
-    GPIO.enable_w1ts.enable_w1ts = 1 << WS2812_PIN;
+    gpio_ll_output_enable(&GPIO, WS2812_PIN);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[WS2812_PIN], PIN_FUNC_GPIO); // Set as GPIO
     GPIO.func_out_sel_cfg[WS2812_PIN].out_sel = RMT_SIG;
     GPIO.func_out_sel_cfg[WS2812_PIN].oen_sel = 1;
@@ -111,18 +115,22 @@ void ws2812_init()
 #if WS2812_USE_SPI
     // Configure SPI pins
     spi_pins_t spi_pins = {.mosi = WS2812_PIN, .miso = 9, .sck = 14};
-    spi_init(spi_pins);
+    spi_config_t spi_config = {.port = SPI_GET_HW(2), .pins = spi_pins};
+    spi_init(&spi_config);
 
     // Set SPI device parameters
-    spi_dev.speed_hz = 2000000;    // Set SPI clock speed
-    spi_dev.cs_pin = SPI_DEVICE_0; // Chip select pin
-    spi_dev.id = 0;                // Device ID
-    spi_dev.mode = 0;              // SPI mode
-    spi_device_config(&spi_dev);   // Configure SPI device
+    spi_dev.speed_hz = 2000000; // Set SPI clock speed
+    spi_dev.cs_pin = 5;         // Chip select pin
+    spi_dev.id = 0;             // Device ID
+    spi_dev.mode = 0;           // SPI mode
+    spi_dev.port = spi_config.port;
+    spi_device_config(&spi_dev); // Configure SPI device
 
 #elif WS2812_USE_RMT
 
-    rmt_gpio_config();                                              // Configure RMT GPIO
+    rmt_gpio_config();
+    rmt_ll_enable_bus_clock(0, true);
+    rmt_ll_enable_group_clock(&RMT, true);                          // Configure RMT GPIO
     rmt_ll_set_group_clock_src(&RMT, 0, RMT_CLK_SRC_XTAL, 2, 0, 0); // Set RMT clock source
     rmt_ll_tx_enable_carrier_modulation(&RMT, 0, false);            // Disable carrier modulation
     rmt_ll_tx_set_channel_clock_div(&RMT, 0, 1);                    // Set RMT channel clock divider

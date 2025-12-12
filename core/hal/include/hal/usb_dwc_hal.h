@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -28,15 +28,6 @@ extern "C" {
 // ------------------------------------------------ Macros and Types ---------------------------------------------------
 
 // ----------------------- Configs -------------------------
-
-/**
- * @brief Possible FIFO biases
- */
-typedef enum {
-    USB_HAL_FIFO_BIAS_DEFAULT,           /**< Default (balanced) FIFO sizes */
-    USB_HAL_FIFO_BIAS_RX,                /**< Bigger RX FIFO for IN transfers */
-    USB_HAL_FIFO_BIAS_PTX,               /**< Bigger periodic TX FIFO for ISOC OUT transfers */
-} usb_hal_fifo_bias_t;
 
 /**
  * @brief MPS limits based on FIFO configuration
@@ -171,13 +162,23 @@ typedef struct {
  * @brief HAL context structure
  */
 typedef struct {
-    //Context
-    usb_dwc_dev_t *dev;                            /**< Pointer to base address of DWC_OTG registers */
-    //Host Port related
-    uint32_t *periodic_frame_list;                 /**< Pointer to scheduling frame list */
-    usb_hal_frame_list_len_t frame_list_len;       /**< Length of the periodic scheduling frame list */
-    //FIFO related
-    usb_dwc_hal_fifo_config_t fifo_config;         /**< FIFO sizes configuration */
+    // HW context
+    usb_dwc_dev_t *dev;                         /**< Pointer to base address of DWC_OTG registers */
+
+    // Host Port related
+    uint32_t *periodic_frame_list;              /**< Pointer to scheduling frame list */
+    usb_hal_frame_list_len_t frame_list_len;    /**< Length of the periodic scheduling frame list */
+
+    // FIFO related
+    usb_dwc_hal_fifo_config_t fifo_config;      /**< FIFO sizes configuration */
+
+    // Configuration of the USB-DWC core. Read from read-only HW registers
+    struct {
+        unsigned chan_num_total;                /**< Total number of channels for this configuration */
+        unsigned hsphy_type;                    /**< HS PHY type of this configuration */
+        unsigned fifo_size;                     /**< Total FIFO size [in lines] in this configuration */
+    } constant_config;
+
     union {
         struct {
             uint32_t dbnc_lock_enabled: 1;      /**< Debounce lock enabled */
@@ -188,11 +189,12 @@ typedef struct {
         };
         uint32_t val;
     } flags;
-    //Channel related
+
+    // Channel related
     struct {
-        int num_allocd;                             /**< Number of channels currently allocated */
-        uint32_t chan_pend_intrs_msk;               /**< Bit mask of channels with pending interrupts */
-        usb_dwc_hal_chan_t *hdls[OTG_NUM_HOST_CHAN];    /**< Handles of each channel. Set to NULL if channel has not been allocated */
+        int num_allocated;                      /**< Number of channels currently allocated */
+        uint32_t chan_pend_intrs_msk;           /**< Bit mask of channels with pending interrupts */
+        usb_dwc_hal_chan_t **hdls;              /**< Handles of each channel. Set to NULL if channel has not been allocated */
     } channels;
 } usb_dwc_hal_context_t;
 
@@ -208,16 +210,20 @@ typedef struct {
  * - Interrupt allocated but DISABLED (in case of an unknown interrupt state)
  * Exit:
  * - Checks to see if DWC_OTG is alive, and if HW version/config is correct
- * - HAl context initialized
+ * - HAL context initialized
+ * - Read and save relevant USB-DWC configuration parameters
  * - Sets default values to some global and OTG registers (GAHBCFG and GUSBCFG)
  * - Umask global interrupt signal
  * - Put DWC_OTG into host mode. Require 25ms delay before this takes effect.
  * - State -> USB_DWC_HAL_PORT_STATE_OTG
  * - Interrupts cleared. Users can now enable their ISR
  *
- * @param[inout] hal Context of the HAL layer
+ * @attention The user must allocate memory for channel handlers with
+ *            `hal->channels.hdls = malloc(hal->constant_config.chan_num_total * sizeof(usb_dwc_hal_chan_t*))`
+ * @param[inout] hal     Context of the HAL layer
+ * @param[in]    port_id USB port ID
  */
-void usb_dwc_hal_init(usb_dwc_hal_context_t *hal);
+void usb_dwc_hal_init(usb_dwc_hal_context_t *hal, int port_id);
 
 /**
  * @brief Deinitialize the HAL context
@@ -241,25 +247,40 @@ void usb_dwc_hal_deinit(usb_dwc_hal_context_t *hal);
  *
  * @note This has nothing to do with a USB bus reset. It simply resets the peripheral
  *
- * @param hal Context of the HAL layer
+ * @param[in] hal Context of the HAL layer
  */
 void usb_dwc_hal_core_soft_reset(usb_dwc_hal_context_t *hal);
 
 /**
- * @brief Set FIFO bias
+ * @brief Check if FIFO configuration is valid
  *
- * This function will set the sizes of each of the FIFOs (RX FIFO, Non-periodic TX FIFO, Periodic TX FIFO) and must be
- * called at least once before allocating the channel. Based on the type of endpoints (and the endpoints' MPS), there
- * may be situations where this function may need to be called again to resize the FIFOs. If resizing FIFOs dynamically,
- * it is the user's responsibility to ensure there are no active channels when this function is called.
+ * This function checks that the sum of FIFO sizes does not exceed available space.
+ * It does not modify hardware state and is safe to call from HAL or upper layers.
  *
- * @note After a port reset, the FIFO size registers will reset to their default values, so this function must be called
- *       again post reset.
- *
- * @param[in] hal       Context of the HAL layer
- * @param[in] fifo_bias FIFO bias configuration
+ * @param[in] hal     Pointer to HAL context (must be initialized)
+ * @param[in] config  Pointer to FIFO config to validate
+ * @return true if config is valid, false otherwise
  */
-void usb_dwc_hal_set_fifo_bias(usb_dwc_hal_context_t *hal, const usb_hal_fifo_bias_t fifo_bias);
+bool usb_dwc_hal_fifo_config_is_valid(const usb_dwc_hal_context_t *hal, const usb_dwc_hal_fifo_config_t *config);
+
+
+/**
+ * @brief Set the FIFO sizes of the USB-DWC core
+ *
+ * This function programs the FIFO sizing registers (RX FIFO, Non-Periodic TX FIFO,
+ * and Periodic TX FIFO) based on the provided configuration. It must be called
+ * during USB initialization, before any channels are allocated or transfers started.
+ *
+ * The sum of all FIFO sizes must not exceed the hardware-defined limit
+ * (see HWCFG3.DfifoDepth and EPINFO_CTL).
+ *
+ * @note This function must be called exactly once during initialization and after
+ *       each USB port reset. It is typically used internally by the USB Host stack.
+ *
+ * @param[inout] hal     Pointer to the HAL context
+ * @param[in]    config  Pointer to the FIFO configuration to apply (must be valid)
+ */
+void usb_dwc_hal_set_fifo_config(usb_dwc_hal_context_t *hal, const usb_dwc_hal_fifo_config_t *config);
 
 /**
  * @brief Get MPS limits
@@ -516,6 +537,80 @@ static inline void usb_dwc_hal_disable_debounce_lock(usb_dwc_hal_context_t *hal)
     usb_dwc_ll_hprt_intr_clear(hal->dev, USB_DWC_LL_INTR_HPRT_PRTCONNDET);
     //Re-enable the hprt (connection) and disconnection interrupts
     usb_dwc_ll_gintmsk_en_intrs(hal->dev, USB_DWC_LL_INTR_CORE_PRTINT | USB_DWC_LL_INTR_CORE_DISCONNINT);
+}
+
+/**
+ * @brief Check if the root port is suspended
+ *
+ * This function checks if the root port entered suspended state, after calling usb_dwc_hal_port_suspend()
+ *
+ * @param hal Context of the HAL layer
+ * @return true The root port is suspended
+ * @return false The root port is not suspended
+ */
+static inline bool usb_dwc_hal_port_check_if_suspended(usb_dwc_hal_context_t *hal)
+{
+    return usb_dwc_ll_hprt_get_port_suspend(hal->dev);
+}
+
+// ----------------------------------------------------- Power and Clock gating ----------------------------------------
+
+/**
+ * @brief Gate internal clock of the DWC_OTG core
+ *
+ * This function gates the internal clock of the DWC_OTG core to reduce power consumption
+ *
+ * Internal clock gating:
+ *  - stop PHY clock (PCLK)
+ *  - gate HCLK to modules other than the AHB slave, AHB master and wakeup logic
+ * Internal clock un-gating:
+ *  - un-stop PHY clock (PCLK)
+ *  - un-gate HCLK
+ *
+ * @note This is a part of a sequence from the DWC Programming guide, chapter 14.2.2.1
+ * @param hal Context of the HAL layer
+ * @param enable Enable or disable internal clock gating
+ */
+static inline void usb_dwc_hal_pwr_clk_internal_clock_gate(usb_dwc_hal_context_t *hal, bool enable)
+{
+    usb_dwc_ll_set_stoppclk(hal->dev, enable);      // Enable/disable PHY clock stop
+    usb_dwc_ll_set_gatehclk(hal->dev, enable);      // Gate/ungate HCLK
+}
+
+/**
+ * @brief Check if the PHY clock (PCLK) stop is enabled or disabled
+ *
+ * @param hal Context of the HAL layer
+ * @return true The PCLK stop is enabled
+ * @return false The PCLK stop is not enabled
+ */
+static inline bool usb_dwc_hal_pwr_clk_check_phy_clk_stopped(usb_dwc_hal_context_t *hal)
+{
+    return usb_dwc_ll_get_stoppclk_st(hal->dev);
+}
+
+/**
+ * @brief Check if the HCLK is gated or ungated
+ *
+ * @param hal Context of the HAL layer
+ * @return true The HCLK is gated
+ * @return false The HCLK is not gated
+ */
+static inline bool usb_dwc_hal_pwr_clk_check_hclk_gated(usb_dwc_hal_context_t *hal)
+{
+    return usb_dwc_ll_get_gatehclk_st(hal->dev);
+}
+
+/**
+ * @brief Check if PHY is in sleep state
+ *
+ * @param hal Context of the HAL layer
+ * @return true The USB PHY is in sleep state
+ * @return false The USB PHY is not in sleep state
+ */
+static inline bool usb_dwc_hal_pwr_clk_check_phy_sleep(usb_dwc_hal_context_t *hal)
+{
+    return usb_dwc_ll_get_physleep_st(hal->dev);
 }
 
 // ----------------------------------------------------- Channel -------------------------------------------------------

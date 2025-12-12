@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -38,6 +38,7 @@ typedef enum {
     ADC_CHANNEL_7,     ///< ADC channel
     ADC_CHANNEL_8,     ///< ADC channel
     ADC_CHANNEL_9,     ///< ADC channel
+    ADC_CHANNEL_10,    ///< ADC channel
 } adc_channel_t;
 
 /**
@@ -51,6 +52,9 @@ typedef enum {
     ADC_ATTEN_DB_11 __attribute__((deprecated)) = ADC_ATTEN_DB_12,  ///<This is deprecated, it behaves the same as `ADC_ATTEN_DB_12`
 } adc_atten_t;
 
+/**
+ * @brief ADC bitwidth
+ */
 typedef enum {
     ADC_BITWIDTH_DEFAULT = 0, ///< Default ADC output bits, max supported width will be selected
     ADC_BITWIDTH_9  = 9,      ///< ADC output width is 9Bit
@@ -60,10 +64,19 @@ typedef enum {
     ADC_BITWIDTH_13 = 13,     ///< ADC output width is 13Bit
 } adc_bitwidth_t;
 
+/**
+ * @brief ADC ULP working mode
+ *
+ * This decides the controller that controls ADC when in low power mode.
+ * Set `ADC_ULP_MODE_DISABLE` for normal mode.
+ */
 typedef enum {
     ADC_ULP_MODE_DISABLE = 0, ///< ADC ULP mode is disabled
     ADC_ULP_MODE_FSM     = 1, ///< ADC is controlled by ULP FSM
     ADC_ULP_MODE_RISCV   = 2, ///< ADC is controlled by ULP RISCV
+#if SOC_LP_ADC_SUPPORTED
+    ADC_ULP_MODE_LP_CORE = 3, ///< ADC is controlled by LP Core
+#endif // SOC_LP_ADC_SUPPORTED
 } adc_ulp_mode_t;
 
 /**
@@ -121,6 +134,7 @@ typedef enum {
     ADC_DIGI_IIR_FILTER_COEFF_4,     ///< The filter coefficient is 4
     ADC_DIGI_IIR_FILTER_COEFF_8,     ///< The filter coefficient is 8
     ADC_DIGI_IIR_FILTER_COEFF_16,    ///< The filter coefficient is 16
+    ADC_DIGI_IIR_FILTER_COEFF_32,    ///< The filter coefficient is 32
     ADC_DIGI_IIR_FILTER_COEFF_64,    ///< The filter coefficient is 64
 } adc_digi_iir_filter_coeff_t;
 
@@ -211,7 +225,7 @@ typedef struct {
     };
 } adc_digi_output_data_t;
 
-#elif CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32H2
+#elif CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32H2 || CONFIG_IDF_TARGET_ESP32C5 || CONFIG_IDF_TARGET_ESP32C61
 /**
  * @brief ADC digital controller (DMA mode) output data format.
  *        Used to analyze the acquired ADC (DMA) data.

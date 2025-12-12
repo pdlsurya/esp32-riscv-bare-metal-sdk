@@ -26,12 +26,17 @@ extern "C" {
 
 #define ENTRY(n)    (BIT(n))
 
+// Only used for driver retention function testing when lightsleep is not supported
+#define REGDMA_SW_TRIGGER_ENTRY             (ENTRY(3))
+
 #define REGDMA_PHY_LINK(_pri)               ((0x00 << 8) | _pri)
 #define REGDMA_PCR_LINK(_pri)               ((0x01 << 8) | _pri)
 #define REGDMA_MODEMSYSCON_LINK(_pri)       ((0x02 << 8) | _pri)
 #define REGDMA_MODEMLPCON_LINK(_pri)        ((0x03 << 8) | _pri)
 #define REGDMA_PAU_LINK(_pri)               ((0x04 << 8) | _pri)
+#define REGDMA_PVT_LINK(_pri)               ((0x05 << 8) | _pri)
 
+#define REGDMA_CACHE_LINK(_pri)             ((0x0c << 8) | _pri)
 #define REGDMA_INTMTX_LINK(_pri)            ((0x0d << 8) | _pri)
 #define REGDMA_HPSYS_LINK(_pri)             ((0x0e << 8) | _pri)
 #define REGDMA_TEEAPM_LINK(_pri)            ((0x0f << 8) | _pri)
@@ -50,6 +55,16 @@ extern "C" {
 #define REGDMA_TG1_WDT_LINK(_pri)           ((0x1B << 8) | _pri)
 #define REGDMA_TG0_TIMER_LINK(_pri)         ((0x1C << 8) | _pri)
 #define REGDMA_TG1_TIMER_LINK(_pri)         ((0x1D << 8) | _pri)
+#define REGDMA_I2S_LINK(_pri)               ((0x1E << 8) | _pri)
+#define REGDMA_ETM_LINK(_pri)               ((0x1F << 8) | _pri)
+#define REGDMA_TSENS_LINK(_pri)             ((0x20 << 8) | _pri)
+#define REGDMA_TWAI_LINK(_pri)              ((0x21 << 8) | _pri)
+#define REGDMA_PARLIO_LINK(_pri)            ((0x22 << 8) | _pri)
+#define REGDMA_GPSPI_LINK(_pri)             ((0x23 << 8) | _pri)
+#define REGDMA_LEDC_LINK(_pri)              ((0x24 << 8) | _pri)
+#define REGDMA_PCNT_LINK(_pri)              ((0x25 << 8) | _pri)
+#define REGDMA_MCPWM_LINK(_pri)             ((0x26 << 8) | _pri)
+
 #define REGDMA_MODEM_FE_LINK(_pri)          ((0xFF << 8) | _pri)
 
 #define REGDMA_LINK_PRI_SYS_CLK                 REGDMA_LINK_PRI_0
@@ -64,9 +79,18 @@ extern "C" {
 #define REGDMA_LINK_PRI_IEEE802154              REGDMA_LINK_PRI_GENERAL_PERIPH
 #define REGDMA_LINK_PRI_GDMA                    REGDMA_LINK_PRI_GENERAL_PERIPH
 #define REGDMA_LINK_PRI_RMT                     REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_ETM                     REGDMA_LINK_PRI_GENERAL_PERIPH
 #define REGDMA_LINK_PRI_GPTIMER                 REGDMA_LINK_PRI_GENERAL_PERIPH
 #define REGDMA_LINK_PRI_I2C                     REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_I2S                     REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_PARLIO                  REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_PCNT                    REGDMA_LINK_PRI_GENERAL_PERIPH
 #define REGDMA_LINK_PRI_UART                    REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_TEMPERATURE_SENSOR      REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_TWAI                    REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_GPSPI                   REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_LEDC                    REGDMA_LINK_PRI_GENERAL_PERIPH
+#define REGDMA_LINK_PRI_MCPWM                   REGDMA_LINK_PRI_GENERAL_PERIPH
 
 typedef enum {
     REGDMA_LINK_PRI_0 = 0,
@@ -79,7 +103,6 @@ typedef enum {
     REGDMA_LINK_PRI_7,
 } regdma_link_priority_t;
 
-
 typedef void * regdma_entry_buf_t[REGDMA_LINK_ENTRY_NUM];
 
 typedef enum regdma_link_mode {
@@ -88,7 +111,6 @@ typedef enum regdma_link_mode {
     REGDMA_LINK_MODE_WRITE,          /*!< Link used to direct write to registers*/
     REGDMA_LINK_MODE_WAIT            /*!< Link used to wait for register value to meet condition*/
 } regdma_link_mode_t;
-
 
 typedef struct regdma_link_head {
     volatile uint32_t length: 10, /* total count of registers that need to be backup or restore, unit: 1 word = 4 bytes */
@@ -151,12 +173,14 @@ typedef struct regdma_link_branch_write_wait_body {
     volatile uint32_t   mask;
 } regdma_link_branch_write_wait_body_t;
 
-ESP_STATIC_ASSERT(REGDMA_LINK_ENTRY_NUM < 16, "regdma link entry number should less 16");
+ESP_STATIC_ASSERT(REGDMA_LINK_ENTRY_NUM <= 16, "regdma link entry number should equal to and less than 16");
 typedef struct regdma_link_stats {
     volatile uint32_t   ref: REGDMA_LINK_ENTRY_NUM, /* a bitmap, identifies which entry has referenced the current link */
-             reserve: 16-REGDMA_LINK_ENTRY_NUM,
+#if REGDMA_LINK_ENTRY_NUM < 16
+             reserve: 16 - REGDMA_LINK_ENTRY_NUM,
+#endif
              id: 16; /* REGDMA linked list node unique identifier */
-    volatile uint32_t   module; /* a bitmap used to identify the module to which the current node belongs */
+    volatile int    module; /* a number used to identify the module to which the current node belongs */
 } regdma_link_stats_t;
 
 typedef struct regdma_link_continuous {
