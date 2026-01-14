@@ -65,7 +65,7 @@ void ws2812_write(ws2812_color_t color)
             buffer[index++] = 0b100; // Logic '0' for SPI
         }
     }
-    spi_transceive(&spi_dev, buffer, NULL, 24); // Send data via SPI
+    spi_transceive(&spi_dev, buffer, NULL, 24, false); // Send data via SPI
 
 #elif WS2812_USE_RMT
     rmt_ll_tx_reset_pointer(&RMT, 0); // Reset RMT pointer

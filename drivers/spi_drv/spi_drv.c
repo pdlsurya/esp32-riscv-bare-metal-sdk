@@ -3,6 +3,7 @@
 #include "hal/gpio_ll.h"
 #include "hal/pcnt_ll.h"
 #include "spi_drv.h"
+#include "usb_serial.h"
 
 #define SPI_CLK_DUTY_50 128
 
@@ -46,10 +47,6 @@
 
 #endif
 
-static spi_pins_t spi_pins;
-
-static bool spi_use_iomux = false;
-
 static bool driver_configured[2] = {false, false};
 
 static uint8_t cs_signals[2][6] = {
@@ -64,26 +61,37 @@ static void spi_gpio_config(spi_config_t *config)
     // Configure mosi pin
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[config->pins.mosi], PIN_FUNC_GPIO); // Set as GPIO
     GPIO.func_out_sel_cfg[config->pins.mosi].out_sel = config->port == &GPSPI2 ? SPI2_MOSI_GPIO_SIG : SPI3_MOSI_GPIO_SIG;
+    gpio_ll_output_enable(&GPIO, config->pins.mosi);
+    gpio_ll_input_disable(&GPIO, config->pins.mosi);
 
     // Configure miso pin
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[config->pins.miso], PIN_FUNC_GPIO); // Set as GPIO
+    gpio_ll_input_enable(&GPIO, config->pins.miso);
     GPIO.func_in_sel_cfg[config->port == &GPSPI2 ? SPI2_MISO_GPIO_SIG : SPI3_MISO_GPIO_SIG].sig_in_sel = 1;
     GPIO.func_in_sel_cfg[config->port == &GPSPI2 ? SPI2_MISO_GPIO_SIG : SPI3_MISO_GPIO_SIG].in_sel = config->pins.miso;
 
     // Configure sck pin
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[config->pins.sck], PIN_FUNC_GPIO); // Set as GPIO
     GPIO.func_out_sel_cfg[config->pins.sck].out_sel = config->port == &GPSPI2 ? SPI2_SCK_GPIO_SIG : SPI3_SCK_GPIO_SIG;
+    gpio_ll_output_enable(&GPIO, config->pins.sck);
+    gpio_ll_input_disable(&GPIO, config->pins.sck);
 }
 
 void spi_device_config(spi_dev_handle_t *dev)
 {
-    uint8_t spi_port_num = dev->port == &GPSPI2 ? 2 : 3;
-
     spi_ll_master_cal_clock(APB_CLK_FREQ, dev->speed_hz, SPI_CLK_DUTY_50, &dev->clk_reg_val);
 
-    gpio_ll_func_sel(&GPIO, dev->cs_pin, PIN_FUNC_GPIO);
+    if (dev->cs_pin == SPI_CS_UNUSED)
+    {
+        return;
+    }
 
+    uint8_t spi_port_num = dev->port == &GPSPI2 ? 2 : 3;
+
+    gpio_ll_func_sel(&GPIO, dev->cs_pin, PIN_FUNC_GPIO);
     GPIO.func_out_sel_cfg[dev->cs_pin].out_sel = cs_signals[spi_port_num - 2][dev->id];
+    gpio_ll_output_enable(&GPIO, dev->cs_pin);
+    gpio_ll_input_disable(&GPIO, dev->cs_pin);
 }
 
 void spi_init(spi_config_t *config)
@@ -108,7 +116,7 @@ void spi_init(spi_config_t *config)
     driver_configured[spi_port_num - 2] = true;
 }
 
-void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uint32_t len)
+void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uint32_t len, bool hold_cs_low)
 {
 
     uint32_t txn_count = (len + 63) / 64;
@@ -120,8 +128,12 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
 
         spi_ll_set_mosi_bitlen(dev->port, tx_len * 8);
         spi_ll_set_miso_bitlen(dev->port, tx_len * 8);
+        spi_ll_enable_mosi(dev->port, 1);
+        spi_ll_enable_miso(dev->port, 1);
         spi_ll_master_set_mode(dev->port, dev->mode);
         spi_ll_master_set_clock_by_reg(dev->port, &dev->clk_reg_val);
+        const bool keep_cs = hold_cs_low || (txn_idx + 1 < txn_count);
+        spi_ll_master_keep_cs(dev->port, keep_cs);
         spi_ll_master_select_cs(dev->port, dev->id);
         spi_ll_apply_config(dev->port);
 
@@ -156,13 +168,16 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
  * @param byte TX byte
  * @return RX byte
  */
-uint8_t spi_transfer_byte(spi_dev_handle_t *dev, uint8_t tx_byte)
+uint8_t spi_transfer_byte(spi_dev_handle_t *dev, uint8_t tx_byte, bool hold_cs_low)
 {
 
     spi_ll_set_mosi_bitlen(dev->port, 8);
     spi_ll_set_miso_bitlen(dev->port, 8);
+    spi_ll_enable_mosi(dev->port, 1);
+    spi_ll_enable_miso(dev->port, 1);
     spi_ll_master_set_mode(dev->port, dev->mode);
     spi_ll_master_set_clock_by_reg(dev->port, &dev->clk_reg_val);
+    spi_ll_master_keep_cs(dev->port, hold_cs_low);
     spi_ll_master_select_cs(dev->port, dev->id);
     spi_ll_apply_config(dev->port);
 
@@ -176,4 +191,32 @@ uint8_t spi_transfer_byte(spi_dev_handle_t *dev, uint8_t tx_byte)
         ;
 
     return dev->port->data_buf[0].buf;
+}
+
+void spi_send_dummy_clocks(spi_dev_handle_t *dev, uint32_t cycles, bool cs_low, bool hold_cs_low)
+{
+    while (cycles > 0U)
+    {
+        uint32_t chunk_cycles = (cycles > 256U) ? 256U : cycles;
+        const bool keep_cs = cs_low && (hold_cs_low || (cycles > chunk_cycles));
+
+        spi_ll_enable_mosi(dev->port, 0);
+        spi_ll_enable_miso(dev->port, 0);
+        spi_ll_set_dummy(dev->port, chunk_cycles);
+        spi_ll_master_set_mode(dev->port, dev->mode);
+        spi_ll_master_set_clock_by_reg(dev->port, &dev->clk_reg_val);
+        spi_ll_master_keep_cs(dev->port, keep_cs);
+        spi_ll_master_select_cs(dev->port, cs_low ? dev->id : -1);
+        spi_ll_apply_config(dev->port);
+
+        spi_ll_user_start(dev->port);
+        while (spi_ll_get_running_cmd(dev->port))
+            ;
+
+        cycles -= chunk_cycles;
+    }
+
+    spi_ll_set_dummy(dev->port, 0);
+    spi_ll_enable_mosi(dev->port, 1);
+    spi_ll_enable_miso(dev->port, 1);
 }

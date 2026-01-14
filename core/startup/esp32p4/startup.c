@@ -52,6 +52,8 @@ static inline void cpu_init()
 
     // Start with enabling fpu
     rv_utils_enable_fpu();
+
+    rv_utils_intr_global_enable();
 }
 
 /**

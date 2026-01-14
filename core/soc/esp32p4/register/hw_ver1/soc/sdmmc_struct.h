@@ -1299,7 +1299,7 @@ typedef union {
          *  CPU write and read transmit data by FIFO. This register points to the current Data
          *  FIFO .
          */
-        uint32_t buffifo_reg:32;
+        uint32_t buffifo_reg;
     };
     uint32_t val;
 } sdhost_buffifo_reg_t;
