@@ -25,18 +25,24 @@
 #include <string.h>
 #include "i2s_drv.h"
 #include "delay.h"
+#include "interrupts.h"
 #include "hal/dma_types.h"
 #include "hal/gdma_ll.h"
 #include "hal/gpio_ll.h"
 #include "hal/hal_utils.h"
+#include "riscv/rv_utils.h"
 #include "soc/io_mux_reg.h"
+#include "soc/gdma_periph.h"
 #include "soc/i2s_periph.h"
+#include "soc/soc.h"
 #include "soc/soc_caps.h"
 #include "soc/gdma_channel.h"
+#include "usb_serial.h"
 
 #if defined(TARGET_SOC_ESP32P4)
 #include "hal/ahb_dma_ll.h"
 #include "hal/cache_ll.h"
+#include "soc/clic_reg.h"
 
 /* Use non-atomic raw LL entry points in this bare-metal SDK. */
 #undef i2s_ll_enable_bus_clock
@@ -81,6 +87,12 @@
 #define I2S_LOG(...)
 #endif
 
+#if defined(__riscv)
+#define I2S_DMA_MEM_BARRIER() asm volatile("fence rw, rw" ::: "memory")
+#else
+#define I2S_DMA_MEM_BARRIER() do {} while (0)
+#endif
+
 #if defined(TARGET_SOC_ESP32P4)
 typedef ahb_dma_dev_t i2s_dma_dev_t;
 #define I2S_DMA_HW AHB_DMA_LL_GET_HW(0)
@@ -103,7 +115,10 @@ typedef ahb_dma_dev_t i2s_dma_dev_t;
 #define I2S_DMA_TX_DISCONNECT(dma, ch) ahb_dma_ll_tx_disconnect_from_periph((dma), (ch))
 #define I2S_DMA_TX_CLEAR_INTERRUPT(dma, ch, mask) ahb_dma_ll_tx_clear_interrupt_status((dma), (ch), (mask))
 #define I2S_DMA_TX_GET_INTERRUPT(dma, ch) ahb_dma_ll_tx_get_interrupt_status((dma), (ch), true)
+#define I2S_DMA_TX_ENABLE_INTERRUPT(dma, ch, mask, enable) ahb_dma_ll_tx_enable_interrupt((dma), (ch), (mask), (enable))
 #define I2S_DMA_TX_SET_DESC(dma, ch, addr) ahb_dma_ll_tx_set_desc_addr((dma), (ch), (addr))
+#define I2S_DMA_TX_GET_EOF_DESC(dma, ch) ahb_dma_ll_tx_get_eof_desc_addr((dma), (ch))
+#define I2S_DMA_TX_GET_PREFETCH_DESC(dma, ch) ahb_dma_ll_tx_get_prefetched_desc_addr((dma), (ch))
 #define I2S_DMA_TX_START(dma, ch) ahb_dma_ll_tx_start((dma), (ch))
 #define I2S_DMA_TX_STOP(dma, ch) ahb_dma_ll_tx_stop((dma), (ch))
 #define I2S_DMA_TX_IS_IDLE(dma, ch) ahb_dma_ll_tx_is_desc_fsm_idle((dma), (ch))
@@ -128,7 +143,10 @@ typedef gdma_dev_t i2s_dma_dev_t;
 #define I2S_DMA_TX_DISCONNECT(dma, ch) gdma_ll_tx_disconnect_from_periph((dma), (ch))
 #define I2S_DMA_TX_CLEAR_INTERRUPT(dma, ch, mask) gdma_ll_tx_clear_interrupt_status((dma), (ch), (mask))
 #define I2S_DMA_TX_GET_INTERRUPT(dma, ch) gdma_ll_tx_get_interrupt_status((dma), (ch), true)
+#define I2S_DMA_TX_ENABLE_INTERRUPT(dma, ch, mask, enable) gdma_ll_tx_enable_interrupt((dma), (ch), (mask), (enable))
 #define I2S_DMA_TX_SET_DESC(dma, ch, addr) gdma_ll_tx_set_desc_addr((dma), (ch), (addr))
+#define I2S_DMA_TX_GET_EOF_DESC(dma, ch) gdma_ll_tx_get_eof_desc_addr((dma), (ch))
+#define I2S_DMA_TX_GET_PREFETCH_DESC(dma, ch) gdma_ll_tx_get_prefetched_desc_addr((dma), (ch))
 #define I2S_DMA_TX_START(dma, ch) gdma_ll_tx_start((dma), (ch))
 #define I2S_DMA_TX_STOP(dma, ch) gdma_ll_tx_stop((dma), (ch))
 #define I2S_DMA_TX_IS_IDLE(dma, ch) gdma_ll_tx_is_desc_fsm_idle((dma), (ch))
@@ -140,6 +158,301 @@ typedef gdma_dev_t i2s_dma_dev_t;
  */
 static dma_descriptor_t s_i2s_dma_desc[SOC_I2S_NUM][SOC_GDMA_PAIRS_PER_GROUP_MAX][I2S_STREAM_MAX_BUFFERS] __attribute__((aligned(4)));
 static uint8_t s_i2s_dma_buf[SOC_I2S_NUM][SOC_GDMA_PAIRS_PER_GROUP_MAX][I2S_STREAM_MAX_BUFFERS][I2S_DMA_MAX_CHUNK] __attribute__((aligned(4)));
+static i2s_dev_handle_t *s_i2s_stream_irq_owner[SOC_GDMA_PAIRS_PER_GROUP_MAX];
+static void i2s_stream_reclaim_completed(i2s_dev_handle_t *dev);
+static dma_descriptor_t *i2s_get_dma_desc(uint8_t port_id, uint8_t dma_channel, uint8_t slot);
+static dma_descriptor_t *i2s_get_dma_desc_cpu(uint8_t port_id, uint8_t dma_channel, uint8_t slot);
+#define I2S_STREAM_CPU_INTR_BASE 20U
+extern void intr_matrix_route(int intr_src, int intr_num);
+
+static int i2s_stream_get_dma_tx_irq_source(uint8_t dma_channel)
+{
+#if SOC_GDMA_PAIRS_PER_GROUP_MAX > 0
+    if (dma_channel >= SOC_GDMA_PAIRS_PER_GROUP_MAX)
+    {
+        return -1;
+    }
+    return gdma_periph_signals.groups[GDMA_LL_AHB_GROUP_START_ID].pairs[dma_channel].tx_irq_id;
+#else
+    (void)dma_channel;
+    return -1;
+#endif
+}
+
+static int i2s_stream_get_cpu_intr_num(uint8_t dma_channel)
+{
+    uint32_t inum = I2S_STREAM_CPU_INTR_BASE + dma_channel;
+    if (inum >= SOC_CPU_INTR_NUM)
+    {
+        return -1;
+    }
+    return (int)inum;
+}
+
+static inline uint32_t i2s_stream_irq_lock_save(void)
+{
+    uint32_t mstatus = RV_READ_CSR(mstatus);
+    rv_utils_intr_global_disable();
+    return mstatus;
+}
+
+static inline void i2s_stream_irq_restore(uint32_t mstatus)
+{
+    if ((mstatus & MSTATUS_MIE) != 0U)
+    {
+        rv_utils_intr_global_enable();
+    }
+}
+
+static void i2s_stream_log_desc_error(i2s_dev_handle_t *dev, uint32_t dma_status, const char *where)
+{
+    if (dev == NULL)
+    {
+        return;
+    }
+
+    i2s_dma_dev_t *dma = I2S_DMA_HW;
+    uint8_t tail = dev->stream_tail;
+    dma_descriptor_t *tail_desc_cpu = i2s_get_dma_desc_cpu(dev->port_id, dev->dma_channel, tail);
+
+    uint32_t cur_desc = 0U;
+    uint32_t eof_desc = 0U;
+    if (dma != NULL)
+    {
+        cur_desc = I2S_DMA_TX_GET_PREFETCH_DESC(dma, dev->dma_channel);
+        eof_desc = I2S_DMA_TX_GET_EOF_DESC(dma, dev->dma_channel);
+    }
+
+    serial_printf("[i2s][err] %s st=0x%08lx ch=%u q=%u/%u h=%u t=%u started=%d idle=%d cur=0x%08lx eof=0x%08lx tail=0x%08lx owner=%lu len=%lu sz=%lu next=0x%08lx buf=0x%08lx\r\n",
+                  where,
+                  (unsigned long)dma_status,
+                  dev->dma_channel,
+                  (unsigned long)dev->stream_queued,
+                  (unsigned long)dev->stream_buf_count,
+                  (unsigned long)dev->stream_head,
+                  (unsigned long)dev->stream_tail,
+                  dev->stream_started ? 1 : 0,
+                  (dma != NULL && I2S_DMA_TX_IS_IDLE(dma, dev->dma_channel)) ? 1 : 0,
+                  (unsigned long)cur_desc,
+                  (unsigned long)eof_desc,
+                  (unsigned long)(uintptr_t)i2s_get_dma_desc(dev->port_id, dev->dma_channel, tail),
+                  (unsigned long)tail_desc_cpu->dw0.owner,
+                  (unsigned long)tail_desc_cpu->dw0.length,
+                  (unsigned long)tail_desc_cpu->dw0.size,
+                  (unsigned long)(uintptr_t)tail_desc_cpu->next,
+                  (unsigned long)(uintptr_t)tail_desc_cpu->buffer);
+}
+
+static void i2s_stream_dma_tx_isr_common(uint32_t ch)
+{
+    if (ch >= SOC_GDMA_PAIRS_PER_GROUP_MAX)
+    {
+        return;
+    }
+
+    i2s_dev_handle_t *dev = s_i2s_stream_irq_owner[ch];
+    i2s_dma_dev_t *dma = I2S_DMA_HW;
+    if (dev == NULL || dma == NULL || !dev->initialized)
+    {
+        return;
+    }
+
+    uint32_t dma_status = I2S_DMA_TX_GET_INTERRUPT(dma, ch);
+    if (dma_status == 0U)
+    {
+        return;
+    }
+
+    I2S_DMA_TX_CLEAR_INTERRUPT(dma, ch, dma_status);
+
+    if ((dma_status & GDMA_LL_EVENT_TX_DESC_ERROR) != 0U)
+    {
+        I2S_DMA_TX_STOP(dma, ch);
+        i2s_ll_tx_stop(dev->port);
+        dev->stream_started = false;
+        dev->stream_error = true;
+        i2s_stream_log_desc_error(dev, dma_status, "isr desc");
+        return;
+    }
+
+    if (!dev->stream_mode || !dev->stream_started)
+    {
+        return;
+    }
+
+    i2s_stream_reclaim_completed(dev);
+
+    if (dev->stream_queued == 0U && I2S_DMA_TX_IS_IDLE(dma, ch))
+    {
+        I2S_DMA_TX_STOP(dma, ch);
+        i2s_ll_tx_stop(dev->port);
+        dev->stream_started = false;
+    }
+}
+
+static void i2s_stream_dma_tx_isr_ch0(void)
+{
+    i2s_stream_dma_tx_isr_common(0U);
+}
+#if SOC_GDMA_PAIRS_PER_GROUP_MAX > 1
+static void i2s_stream_dma_tx_isr_ch1(void)
+{
+    i2s_stream_dma_tx_isr_common(1U);
+}
+#endif
+#if SOC_GDMA_PAIRS_PER_GROUP_MAX > 2
+static void i2s_stream_dma_tx_isr_ch2(void)
+{
+    i2s_stream_dma_tx_isr_common(2U);
+}
+#endif
+
+static interrupt_handler_t s_i2s_stream_dma_isr[SOC_GDMA_PAIRS_PER_GROUP_MAX] = {
+    i2s_stream_dma_tx_isr_ch0,
+#if SOC_GDMA_PAIRS_PER_GROUP_MAX > 1
+    i2s_stream_dma_tx_isr_ch1,
+#endif
+#if SOC_GDMA_PAIRS_PER_GROUP_MAX > 2
+    i2s_stream_dma_tx_isr_ch2,
+#endif
+};
+
+#if defined(TARGET_SOC_ESP32P4)
+static bool i2s_stream_clic_ext_enable(int inum)
+{
+    if (inum < 0 || inum >= SOC_CPU_INTR_NUM)
+    {
+        return false;
+    }
+
+    uint32_t clic_inum = (uint32_t)inum + CLIC_EXT_INTR_NUM_OFFSET;
+    if (clic_inum >= (SOC_CPU_INTR_NUM + CLIC_EXT_INTR_NUM_OFFSET))
+    {
+        return false;
+    }
+
+    /* Use vectored, level-triggered external interrupt entry. */
+    REG8_SET_BIT(BYTE_CLIC_INT_ATTR_REG(clic_inum), BYTE_CLIC_INT_ATTR_SHV);
+    REG8_CLR_BIT(BYTE_CLIC_INT_ATTR_REG(clic_inum), BYTE_CLIC_INT_ATTR_TRIG_M);
+    REG8_SET_BITS(BYTE_CLIC_INT_CTL_REG(clic_inum), (1U << BYTE_CLIC_INT_CTL_S), BYTE_CLIC_INT_CTL_M);
+    REG8_CLR_BIT(BYTE_CLIC_INT_IP_REG(clic_inum), BYTE_CLIC_INT_IP);
+    REG8_SET_BIT(BYTE_CLIC_INT_IE_REG(clic_inum), BYTE_CLIC_INT_IE);
+
+    return true;
+}
+
+static void i2s_stream_clic_ext_disable(int inum)
+{
+    if (inum < 0 || inum >= SOC_CPU_INTR_NUM)
+    {
+        return;
+    }
+
+    uint32_t clic_inum = (uint32_t)inum + CLIC_EXT_INTR_NUM_OFFSET;
+    if (clic_inum >= (SOC_CPU_INTR_NUM + CLIC_EXT_INTR_NUM_OFFSET))
+    {
+        return;
+    }
+
+    REG8_CLR_BIT(BYTE_CLIC_INT_IE_REG(clic_inum), BYTE_CLIC_INT_IE);
+    REG8_CLR_BIT(BYTE_CLIC_INT_IP_REG(clic_inum), BYTE_CLIC_INT_IP);
+}
+#endif
+
+static bool i2s_stream_irq_register(i2s_dev_handle_t *dev)
+{
+    if (dev == NULL || dev->dma_channel >= SOC_GDMA_PAIRS_PER_GROUP_MAX)
+    {
+        return false;
+    }
+
+    i2s_dma_dev_t *dma = I2S_DMA_HW;
+    if (dma == NULL)
+    {
+        return false;
+    }
+
+    uint8_t ch = dev->dma_channel;
+    if (s_i2s_stream_irq_owner[ch] != NULL && s_i2s_stream_irq_owner[ch] != dev)
+    {
+        return false;
+    }
+
+    int inum = i2s_stream_get_cpu_intr_num(ch);
+    int src = i2s_stream_get_dma_tx_irq_source(ch);
+    if (inum < 0 || src < 0 || s_i2s_stream_dma_isr[ch] == NULL)
+    {
+        return false;
+    }
+
+    register_interrupt_handler((uint8_t)inum, s_i2s_stream_dma_isr[ch]);
+    intr_matrix_route(src, inum);
+    s_i2s_stream_irq_owner[ch] = dev;
+    I2S_DMA_TX_ENABLE_INTERRUPT(dma, ch, GDMA_LL_EVENT_TX_EOF | GDMA_LL_EVENT_TX_DONE | GDMA_LL_EVENT_TX_DESC_ERROR, true);
+    I2S_DMA_TX_CLEAR_INTERRUPT(dma, ch, UINT32_MAX);
+
+#if defined(TARGET_SOC_ESP32P4)
+    if (!i2s_stream_clic_ext_enable(inum))
+    {
+        I2S_DMA_TX_ENABLE_INTERRUPT(dma, ch, UINT32_MAX, false);
+        s_i2s_stream_irq_owner[ch] = NULL;
+        register_interrupt_handler((uint8_t)inum, NULL);
+        return false;
+    }
+#endif
+
+    rv_utils_intr_enable((uint32_t)1U << inum);
+    return true;
+}
+
+static void i2s_stream_irq_unregister(i2s_dev_handle_t *dev)
+{
+    if (dev == NULL || dev->dma_channel >= SOC_GDMA_PAIRS_PER_GROUP_MAX)
+    {
+        return;
+    }
+
+    uint8_t ch = dev->dma_channel;
+    int inum = i2s_stream_get_cpu_intr_num(ch);
+    i2s_dma_dev_t *dma = I2S_DMA_HW;
+    if (dma != NULL)
+    {
+        I2S_DMA_TX_ENABLE_INTERRUPT(dma, ch, UINT32_MAX, false);
+        I2S_DMA_TX_CLEAR_INTERRUPT(dma, ch, UINT32_MAX);
+    }
+
+    if (s_i2s_stream_irq_owner[ch] == dev)
+    {
+        s_i2s_stream_irq_owner[ch] = NULL;
+        if (inum >= 0)
+        {
+            rv_utils_intr_disable((uint32_t)1U << inum);
+#if defined(TARGET_SOC_ESP32P4)
+            i2s_stream_clic_ext_disable(inum);
+#endif
+            register_interrupt_handler((uint8_t)inum, NULL);
+        }
+    }
+}
+
+static void i2s_stream_irq_release(i2s_dev_handle_t *dev)
+{
+    if (dev == NULL || dev->dma_channel >= SOC_GDMA_PAIRS_PER_GROUP_MAX)
+    {
+        return;
+    }
+
+    i2s_stream_irq_unregister(dev);
+}
+
+static bool i2s_stream_irq_active(const i2s_dev_handle_t *dev)
+{
+    if (dev == NULL || dev->dma_channel >= SOC_GDMA_PAIRS_PER_GROUP_MAX)
+    {
+        return false;
+    }
+    return s_i2s_stream_irq_owner[dev->dma_channel] == dev;
+}
 
 static int i2s_get_port_id(i2s_dev_t *port)
 {
@@ -352,6 +665,7 @@ static bool i2s_configure_std_tx(i2s_dev_handle_t *dev, const i2s_config_t *conf
     i2s_ll_tx_set_half_sample_bit(dev->port, slot_bits);
 
     i2s_ll_tx_select_std_slot(dev->port, I2S_STD_SLOT_BOTH);
+    i2s_ll_tx_set_skip_mask(dev->port, false);
     i2s_ll_tx_enable_msb_shift(dev->port, true);
     i2s_ll_tx_enable_left_align(dev->port, false);
     i2s_ll_tx_enable_big_endian(dev->port, false);
@@ -483,6 +797,7 @@ static bool i2s_dma_init_tx(i2s_dev_handle_t *dev, bool auto_write_back)
     I2S_DMA_TX_ENABLE_AUTO_WB(dma, dev->dma_channel, auto_write_back);
     I2S_DMA_TX_SET_PRIORITY(dma, dev->dma_channel, 1U);
 
+    I2S_DMA_TX_ENABLE_INTERRUPT(dma, dev->dma_channel, UINT32_MAX, false);
     I2S_DMA_TX_CLEAR_INTERRUPT(dma, dev->dma_channel, UINT32_MAX);
     I2S_DMA_TX_CONNECT(dma, dev->dma_channel, periph_id);
 
@@ -508,9 +823,10 @@ static bool i2s_dma_write_chunk(i2s_dev_handle_t *dev, const uint8_t *data, size
     dma_desc_cpu->dw0.size = (uint32_t)len_bytes;
     dma_desc_cpu->dw0.length = (uint32_t)len_bytes;
     dma_desc_cpu->dw0.suc_eof = 1;
-    dma_desc_cpu->dw0.owner = DMA_DESCRIPTOR_BUFFER_OWNER_DMA;
     dma_desc_cpu->buffer = (void *)dma_buf;
     dma_desc_cpu->next = NULL;
+    I2S_DMA_MEM_BARRIER();
+    dma_desc_cpu->dw0.owner = DMA_DESCRIPTOR_BUFFER_OWNER_DMA;
 
     I2S_DMA_TX_STOP(dma, dev->dma_channel);
     I2S_DMA_TX_RESET_CHANNEL(dma, dev->dma_channel);
@@ -535,6 +851,7 @@ static bool i2s_dma_write_chunk(i2s_dev_handle_t *dev, const uint8_t *data, size
             I2S_DMA_TX_CLEAR_INTERRUPT(dma, dev->dma_channel, dma_status);
             i2s_ll_tx_stop(dev->port);
             I2S_DMA_TX_STOP(dma, dev->dma_channel);
+            i2s_stream_log_desc_error(dev, dma_status, "write desc");
             I2S_LOG("tx desc error status=0x%08lx len=%lu ch=%u",
                     (unsigned long)dma_status,
                     (unsigned long)len_bytes,
@@ -616,7 +933,7 @@ static void i2s_stream_reset_queue(i2s_dev_handle_t *dev)
     dev->stream_error = false;
 }
 
-static bool i2s_stream_start_dma(i2s_dev_handle_t *dev)
+static bool i2s_stream_start_dma_internal(i2s_dev_handle_t *dev, bool reset_tx_fifo)
 {
     i2s_dma_dev_t *dma = I2S_DMA_HW;
     if (dma == NULL || dev->stream_queued == 0U)
@@ -629,11 +946,16 @@ static bool i2s_stream_start_dma(i2s_dev_handle_t *dev)
         return false;
     }
 
+    I2S_DMA_TX_ENABLE_INTERRUPT(dma, dev->dma_channel, GDMA_LL_EVENT_TX_EOF | GDMA_LL_EVENT_TX_DONE | GDMA_LL_EVENT_TX_DESC_ERROR, true);
+    I2S_DMA_MEM_BARRIER();
     I2S_DMA_TX_SET_DESC(dma, dev->dma_channel,
                         (uint32_t)(uintptr_t)i2s_get_dma_desc(dev->port_id, dev->dma_channel, dev->stream_tail));
 
-    i2s_ll_tx_stop(dev->port);
-    i2s_ll_tx_reset_fifo(dev->port);
+    if (reset_tx_fifo)
+    {
+        i2s_ll_tx_stop(dev->port);
+        i2s_ll_tx_reset_fifo(dev->port);
+    }
     dev->port->int_clr.tx_done_int_clr = 1;
 
     I2S_DMA_TX_START(dma, dev->dma_channel);
@@ -643,9 +965,34 @@ static bool i2s_stream_start_dma(i2s_dev_handle_t *dev)
     return true;
 }
 
-static void i2s_stream_try_start(i2s_dev_handle_t *dev)
+static bool i2s_stream_start_dma(i2s_dev_handle_t *dev)
+{
+    return i2s_stream_start_dma_internal(dev, true);
+}
+
+static bool i2s_stream_resume_dma_if_idle(i2s_dev_handle_t *dev)
 {
     i2s_dma_dev_t *dma = I2S_DMA_HW;
+    if (dma == NULL || !dev->stream_mode || dev->stream_error || dev->stream_queued == 0U)
+    {
+        return false;
+    }
+
+    if (!I2S_DMA_TX_IS_IDLE(dma, dev->dma_channel))
+    {
+        return true;
+    }
+
+    /*
+     * Recover from a parked/idle channel with a full TX DMA re-init so we
+     * don't rely on previous internal prefetch state.
+     */
+    dev->stream_started = false;
+    return i2s_stream_start_dma_internal(dev, false);
+}
+
+static void i2s_stream_try_start(i2s_dev_handle_t *dev)
+{
     uint8_t prefill = (dev->stream_buf_count < I2S_STREAM_MIN_PREFILL) ? dev->stream_buf_count : I2S_STREAM_MIN_PREFILL;
 
     if (!dev->stream_mode || dev->stream_error || dev->stream_queued < prefill)
@@ -653,8 +1000,13 @@ static void i2s_stream_try_start(i2s_dev_handle_t *dev)
         return;
     }
 
-    if (dma != NULL && dev->stream_started && !I2S_DMA_TX_IS_IDLE(dma, dev->dma_channel))
+    if (dev->stream_started)
     {
+        /*
+         * Keep stream active if DMA parked at EOF while descriptors are still
+         * queued.
+         */
+        (void)i2s_stream_resume_dma_if_idle(dev);
         return;
     }
 
@@ -663,6 +1015,8 @@ static void i2s_stream_try_start(i2s_dev_handle_t *dev)
 
 static void i2s_stream_reclaim_completed(i2s_dev_handle_t *dev)
 {
+    i2s_dma_dev_t *dma = I2S_DMA_HW;
+
     while (dev->stream_queued > 0U)
     {
         dma_descriptor_t *desc_cpu = i2s_get_dma_desc_cpu(dev->port_id, dev->dma_channel, dev->stream_tail);
@@ -681,6 +1035,13 @@ static void i2s_stream_reclaim_completed(i2s_dev_handle_t *dev)
             dev->stream_tail = 0U;
         }
         dev->stream_queued--;
+    }
+
+    if (dma != NULL && dev->stream_started && dev->stream_queued == 0U && I2S_DMA_TX_IS_IDLE(dma, dev->dma_channel))
+    {
+        I2S_DMA_TX_STOP(dma, dev->dma_channel);
+        i2s_ll_tx_stop(dev->port);
+        dev->stream_started = false;
     }
 }
 
@@ -783,6 +1144,7 @@ void i2s_deinit(i2s_dev_handle_t *dev)
         I2S_DMA_TX_DISCONNECT(dma, dev->dma_channel);
         I2S_DMA_TX_CLEAR_INTERRUPT(dma, dev->dma_channel, UINT32_MAX);
     }
+    i2s_stream_irq_release(dev);
 
     i2s_ll_tx_disable_clock(dev->port);
     dev->initialized = false;
@@ -838,6 +1200,12 @@ bool i2s_stream_begin(i2s_dev_handle_t *dev, uint8_t buffer_count, size_t buffer
     dev->stream_buf_count = buffer_count;
     dev->stream_buf_size = (uint16_t)buffer_size_bytes;
     i2s_stream_reset_queue(dev);
+    if (!i2s_stream_irq_register(dev))
+    {
+        dev->stream_mode = false;
+        i2s_stream_reset_queue(dev);
+        return false;
+    }
     return true;
 }
 
@@ -863,6 +1231,7 @@ void i2s_stream_poll(i2s_dev_handle_t *dev)
         i2s_ll_tx_stop(dev->port);
         dev->stream_started = false;
         dev->stream_error = true;
+        i2s_stream_log_desc_error(dev, dma_status, "poll desc");
         I2S_LOG("stream desc error status=0x%08lx ch=%u",
                 (unsigned long)dma_status,
                 dev->dma_channel);
@@ -874,6 +1243,11 @@ void i2s_stream_poll(i2s_dev_handle_t *dev)
     }
 
     i2s_stream_reclaim_completed(dev);
+
+    if (dev->stream_started && dev->stream_queued > 0U && I2S_DMA_TX_IS_IDLE(dma, dev->dma_channel))
+    {
+        (void)i2s_stream_resume_dma_if_idle(dev);
+    }
 
     if (dev->stream_started && dev->stream_queued == 0U && I2S_DMA_TX_IS_IDLE(dma, dev->dma_channel))
     {
@@ -909,16 +1283,45 @@ size_t i2s_stream_write(i2s_dev_handle_t *dev, const void *data, size_t len_byte
 
     while (written < len_bytes)
     {
-        i2s_stream_poll(dev);
+        uint32_t irq_state = i2s_stream_irq_lock_save();
+        /* Fast path: reclaim by descriptor ownership (updated by DMA HW). */
+        i2s_stream_reclaim_completed(dev);
+        i2s_stream_irq_restore(irq_state);
 
         if (dev->stream_queued >= dev->stream_buf_count)
         {
+            /*
+             * Interrupt-driven wait path: poll status/reclaim on wake-up, and
+             * sleep until the next IRQ instead of tight microsecond polling.
+             */
+            if (i2s_stream_irq_active(dev))
+            {
+                irq_state = i2s_stream_irq_lock_save();
+                i2s_stream_reclaim_completed(dev);
+                i2s_stream_irq_restore(irq_state);
+                (void)i2s_stream_resume_dma_if_idle(dev);
+            }
+            else
+            {
+                i2s_stream_poll(dev);
+                (void)i2s_stream_resume_dma_if_idle(dev);
+            }
+            if (dev->stream_error)
+            {
+                break;
+            }
             if (budget == 0U)
             {
                 break;
             }
-            delay_us(1U);
-            budget--;
+
+            uint32_t sleep_us = (budget > 1000U) ? 1000U : budget;
+#if defined(__riscv)
+            asm volatile("wfi");
+#else
+            delay_us(sleep_us);
+#endif
+            budget -= sleep_us;
             continue;
         }
 
@@ -935,20 +1338,30 @@ size_t i2s_stream_write(i2s_dev_handle_t *dev, const void *data, size_t len_byte
 
         memcpy(buf_cpu, src + written, chunk);
 
+        irq_state = i2s_stream_irq_lock_save();
+        if (dev->stream_error)
+        {
+            i2s_stream_irq_restore(irq_state);
+            break;
+        }
+
         memset(desc_cpu, 0, sizeof(*desc_cpu));
         desc_cpu->dw0.size = (uint32_t)chunk;
         desc_cpu->dw0.length = (uint32_t)chunk;
         desc_cpu->dw0.suc_eof = 1U;
-        desc_cpu->dw0.owner = DMA_DESCRIPTOR_BUFFER_OWNER_DMA;
         desc_cpu->buffer = (void *)buf_dma;
         desc_cpu->next = NULL;
+        I2S_DMA_MEM_BARRIER();
+        desc_cpu->dw0.owner = DMA_DESCRIPTOR_BUFFER_OWNER_DMA;
 
         if (dev->stream_queued > 0U)
         {
             uint8_t prev = (slot == 0U) ? (dev->stream_buf_count - 1U) : (uint8_t)(slot - 1U);
             dma_descriptor_t *prev_desc_cpu = i2s_get_dma_desc_cpu(dev->port_id, dev->dma_channel, prev);
-            prev_desc_cpu->dw0.suc_eof = 0U;
             prev_desc_cpu->next = i2s_get_dma_desc(dev->port_id, dev->dma_channel, slot);
+            I2S_DMA_MEM_BARRIER();
+            /* Clear EOF after publishing next pointer to avoid DMA seeing EOF=0 + NULL next. */
+            prev_desc_cpu->dw0.suc_eof = 0U;
         }
 
         dev->stream_head++;
@@ -957,6 +1370,7 @@ size_t i2s_stream_write(i2s_dev_handle_t *dev, const void *data, size_t len_byte
             dev->stream_head = 0U;
         }
         dev->stream_queued++;
+        i2s_stream_irq_restore(irq_state);
         written += chunk;
 
         i2s_stream_try_start(dev);
@@ -973,9 +1387,31 @@ bool i2s_stream_drain(i2s_dev_handle_t *dev, uint32_t timeout_us)
     }
 
     uint32_t budget = (timeout_us == 0U) ? I2S_DEFAULT_TIMEOUT_US : timeout_us;
-    while (budget-- > 0U)
+    while (budget > 0U)
     {
-        i2s_stream_poll(dev);
+        /*
+         * End-of-stream case: we may have queued data below prefill threshold,
+         * so try to start DMA explicitly to flush remaining buffers.
+         */
+        if (!dev->stream_error && !dev->stream_started && dev->stream_queued > 0U)
+        {
+            (void)i2s_stream_start_dma(dev);
+        }
+
+        /* Reclaim first by owner bit, then poll for error/status as fallback. */
+        uint32_t irq_state = i2s_stream_irq_lock_save();
+        i2s_stream_reclaim_completed(dev);
+        i2s_stream_irq_restore(irq_state);
+
+        if (i2s_stream_irq_active(dev))
+        {
+            (void)i2s_stream_resume_dma_if_idle(dev);
+        }
+        else
+        {
+            i2s_stream_poll(dev);
+            (void)i2s_stream_resume_dma_if_idle(dev);
+        }
         if (dev->stream_error)
         {
             return false;
@@ -984,7 +1420,14 @@ bool i2s_stream_drain(i2s_dev_handle_t *dev, uint32_t timeout_us)
         {
             return true;
         }
-        delay_us(1U);
+
+        uint32_t sleep_us = (budget > 1000U) ? 1000U : budget;
+#if defined(__riscv)
+        asm volatile("wfi");
+#else
+        delay_us(sleep_us);
+#endif
+        budget -= sleep_us;
     }
     return false;
 }
@@ -1002,6 +1445,7 @@ void i2s_stream_stop(i2s_dev_handle_t *dev)
         I2S_DMA_TX_STOP(dma, dev->dma_channel);
         I2S_DMA_TX_CLEAR_INTERRUPT(dma, dev->dma_channel, UINT32_MAX);
     }
+    i2s_stream_irq_unregister(dev);
     i2s_ll_tx_stop(dev->port);
 
     if (dev->stream_mode)

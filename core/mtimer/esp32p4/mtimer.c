@@ -27,18 +27,8 @@ __attribute__((interrupt)) TCM_IRAM_ATTR void m_timer_interrupt_handler()
 #endif
     SET_MTIMECMP((GET_MTIME() + cb_init.period_ticks));
 
-    /*Store mcause, mepc and mstatus in local variables before enabling interrupt nesting*/
-    uint32_t mcause_val = RV_READ_CSR(mcause);
-    uint32_t mepc_val = RV_READ_CSR(mepc);
-    uint32_t mstatus_val = RV_READ_CSR(mstatus);
-
     // Invoke callback function
     cb_init.cb_function();
-
-    /* Restore mstatus, mepc and mcause*/
-    RV_WRITE_CSR(mstatus, mstatus_val);
-    RV_WRITE_CSR(mcause, mcause_val);
-    RV_WRITE_CSR(mepc, mepc_val);
 
 #if USE_ISR_STACK
     /*Load sp with thread  mode stack pointer stored in mscratch and store current isr/handler mode sp to mscratch*/

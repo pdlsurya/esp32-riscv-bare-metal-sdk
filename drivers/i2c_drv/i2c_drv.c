@@ -64,7 +64,10 @@ static void i2c_set_speed(i2c_dev_t *port, i2c_speed_t speed)
  */
 void i2c_init(i2c_config_t *config)
 {
-    assert(config->port != NULL);
+    if ((config == NULL) || (config->port == NULL))
+    {
+        return;
+    }
 
     i2c_gpio_config(config->port, config->sda_pin, config->scl_pin); // Configure the GPIO pins for the I2C bus
 
