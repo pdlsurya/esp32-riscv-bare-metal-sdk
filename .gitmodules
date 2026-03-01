@@ -1,0 +1,8 @@
+[submodule "third_party/esp-nimble"]
+	path = third_party/esp-nimble
+	url = https://github.com/espressif/esp-nimble.git
+	branch = nimble-1.6.0-idf
+[submodule "third_party/lwip"]
+	path = third_party/lwip
+	url = https://github.com/espressif/esp-lwip.git
+	branch = 2.2.0-esp

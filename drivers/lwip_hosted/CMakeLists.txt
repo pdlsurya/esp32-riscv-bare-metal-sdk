@@ -11,6 +11,10 @@ endif()
 set(LWIP_DIR ${LWIP_ROOT}/src)
 set(LWIP_PORT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/port)
 
+if(NOT EXISTS ${LWIP_DIR}/core/init.c)
+    message(FATAL_ERROR "Missing lwIP sources at ${LWIP_ROOT}. Run: git submodule update --init --recursive")
+endif()
+
 set(LWIP_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/lwip_hosted.c
     ${LWIP_DIR}/core/def.c

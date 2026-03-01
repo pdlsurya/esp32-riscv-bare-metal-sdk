@@ -71,8 +71,14 @@ Some low-level components (including portions of HAL headers, register definitio
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/pdlsurya/esp32-riscv-bare-metal-sdk.git
+git clone --recurse-submodules https://github.com/pdlsurya/esp32-riscv-bare-metal-sdk.git
 cd esp32-riscv-bare-metal-sdk
+```
+
+If you already cloned the repository without submodules, run:
+
+```bash
+git submodule update --init --recursive
 ```
 
 ### Build the ESP Hosted example
