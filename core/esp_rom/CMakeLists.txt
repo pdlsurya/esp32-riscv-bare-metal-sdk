@@ -1,5 +1,10 @@
-target_include_directories(esp32c6_sdk PUBLIC
+if(NOT DEFINED TARGET_SOC)
+    message(FATAL_ERROR "TARGET SOC not defined")
+endif()
+
+target_include_directories(esp32_rv_sdk PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/esp32c6
-    ${CMAKE_CURRENT_SOURCE_DIR}/esp32c6
+    ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}
 )
+

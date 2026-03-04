@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -40,7 +40,7 @@ typedef struct {
             i2s_std_slot_mask_t     slot_mask;          /*!< Select the left, right or both slot */
             uint32_t                ws_width;           /*!< WS signal width (i.e. the number of bclk ticks that ws signal is high) */
             bool                    ws_pol;             /*!< WS signal polarity, set true to enable high lever first */
-            bool                    bit_shift;          /*!< Set to enbale bit shift in Philips mode */
+            bool                    bit_shift;          /*!< Set to enable bit shift in Philips mode */
 #if SOC_I2S_HW_VERSION_1    // For esp32/esp32-s2
             bool                    msb_right;          /*!< Set to place right channel data at the MSB in the FIFO */
 #else
@@ -73,6 +73,12 @@ typedef struct {
 #if SOC_I2S_HW_VERSION_1
             i2s_pdm_slot_mask_t     slot_mask;          /*!< Slot mask to choose left or right slot */
 #endif
+            i2s_pdm_data_fmt_t      data_fmt;           /*!< The data format of PDM TX mode. It determines what kind of data format is written in software.
+                                                         *   Typically, set this field to I2S_PDM_DATA_FMT_PCM when PCM2PDM filter is supported in the hardware,
+                                                         *   so that you can write PCM format data in software, and then the hardware PCM2PDM filter will help to
+                                                         *   convert it into PDM format on the line. Otherwise if this field is set to I2S_PDM_DATA_FMT_RAW,
+                                                         *   The data written in software are supposed to be the raw PDM format.
+                                                         */
             uint32_t                sd_prescale;        /*!< Sigma-delta filter prescale */
             i2s_pdm_sig_scale_t     sd_scale;           /*!< Sigma-delta filter scaling value */
             i2s_pdm_sig_scale_t     hp_scale;           /*!< High pass filter scaling value */
@@ -92,6 +98,12 @@ typedef struct {
         /* PDM TX configurations */
         struct {
             i2s_pdm_slot_mask_t     slot_mask;          /*!< Choose the slots to activate */
+            i2s_pdm_data_fmt_t      data_fmt;           /*!< The data format of PDM RX mode. It determines what kind of data format is read in software.
+                                                         *   Typically, set this field to I2S_PDM_DATA_FMT_PCM when PCM2PDM filter is supported in the hardware,
+                                                         *   so that the hardware PDM2PCM filter will help to convert the raw PDM data on the line into PCM format,
+                                                         *   And then you can read PCM format data in software. Otherwise if this field is set to I2S_PDM_DATA_FMT_RAW,
+                                                         *   The data read in software are still in raw PDM format, you may need to convert the raw PDM data into PCM format manually by a software filter.
+                                                         */
 #if SOC_I2S_SUPPORTS_PDM_RX_HP_FILTER
             bool                    hp_en;              /*!< High pass filter enable */
             uint32_t                hp_cut_off_freq_hzx10; /*!< High pass filter cut-off frequency times 10, range 23.3Hz ~ 185Hz, see cut-off frequency sheet above */
@@ -147,7 +159,7 @@ void i2s_hal_calc_mclk_precise_division(uint32_t sclk, uint32_t mclk, hal_utils_
  * @param clk_info clock information, if it is NULL, only set the clock source
  * @param clk_src clock source
  */
-void _i2s_hal_set_tx_clock(i2s_hal_context_t *hal, const i2s_hal_clock_info_t *clk_info, i2s_clock_src_t clk_src);
+void _i2s_hal_set_tx_clock(i2s_hal_context_t *hal, const i2s_hal_clock_info_t *clk_info, i2s_clock_src_t clk_src, hal_utils_clk_div_t *ret_mclk_div);
 /// use a macro to wrap the function, force the caller to use it in a critical section
 /// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
 #define i2s_hal_set_tx_clock(...) (void)__DECLARE_RCC_ATOMIC_ENV; _i2s_hal_set_tx_clock(__VA_ARGS__)
@@ -158,8 +170,9 @@ void _i2s_hal_set_tx_clock(i2s_hal_context_t *hal, const i2s_hal_clock_info_t *c
  * @param hal Context of the HAL layer
  * @param clk_info clock information, if it is NULL, only set the clock source
  * @param clk_src clock source
+ * @param ret_mclk_div return mclk division coefficients, including integer part and decimal part
  */
-void i2s_hal_set_tx_clock(i2s_hal_context_t *hal, const i2s_hal_clock_info_t *clk_info, i2s_clock_src_t clk_src);
+void i2s_hal_set_tx_clock(i2s_hal_context_t *hal, const i2s_hal_clock_info_t *clk_info, i2s_clock_src_t clk_src, hal_utils_clk_div_t *ret_mclk_div);
 #endif  // SOC_PERIPH_CLK_CTRL_SHARED
 
 /**
@@ -168,8 +181,9 @@ void i2s_hal_set_tx_clock(i2s_hal_context_t *hal, const i2s_hal_clock_info_t *cl
  * @param hal Context of the HAL layer
  * @param clk_info clock information, if it is NULL, only set the clock source
  * @param clk_src clock source
+ * @param ret_mclk_div return mclk division coefficients, including integer part and decimal part
  */
-void _i2s_hal_set_rx_clock(i2s_hal_context_t *hal, const i2s_hal_clock_info_t *clk_info, i2s_clock_src_t clk_src);
+void _i2s_hal_set_rx_clock(i2s_hal_context_t *hal, const i2s_hal_clock_info_t *clk_info, i2s_clock_src_t clk_src, hal_utils_clk_div_t *ret_mclk_div);
 
 #if SOC_PERIPH_CLK_CTRL_SHARED
 /// use a macro to wrap the function, force the caller to use it in a critical section
@@ -233,8 +247,9 @@ void i2s_hal_pdm_set_tx_slot(i2s_hal_context_t *hal, bool is_slave, const i2s_ha
  * @brief Enable tx channel as pdm mode
  *
  * @param hal Context of the HAL layer
+ * @param pcm2pdm_en Enable pcm to pdm conversion
  */
-void i2s_hal_pdm_enable_tx_channel(i2s_hal_context_t *hal);
+void i2s_hal_pdm_enable_tx_channel(i2s_hal_context_t *hal, bool pcm2pdm_en);
 #endif // SOC_I2S_SUPPORTS_PDM_TX
 
 #if SOC_I2S_SUPPORTS_PDM_RX
@@ -251,8 +266,9 @@ void i2s_hal_pdm_set_rx_slot(i2s_hal_context_t *hal, bool is_slave, const i2s_ha
  * @brief Enable rx channel as pdm mode
  *
  * @param hal Context of the HAL layer
+ * @param pdm2pcm_en Enable pdm to pcm conversion
  */
-void i2s_hal_pdm_enable_rx_channel(i2s_hal_context_t *hal);
+void i2s_hal_pdm_enable_rx_channel(i2s_hal_context_t *hal, bool pdm2pcm_en);
 #endif // SOC_I2S_SUPPORTS_PDM_RX
 #endif // SOC_I2S_SUPPORTS_PDM
 
@@ -350,7 +366,7 @@ void i2s_hal_tdm_enable_rx_channel(i2s_hal_context_t *hal);
 #define i2s_hal_rx_reset_fifo(hal)              i2s_ll_rx_reset_fifo((hal)->dev)
 
 
-#if !SOC_I2S_SUPPORTS_GDMA
+#if !SOC_GDMA_SUPPORTED
 /**
  * @brief Enable I2S TX DMA
  *

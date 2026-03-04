@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,6 +18,7 @@
 #include "hal/rmt_types.h"
 #include "soc/rmt_struct.h"
 #include "soc/pcr_struct.h"
+#include "soc/retention_periph_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +37,11 @@ extern "C" {
 #define RMT_LL_MAX_LOOP_COUNT_PER_BATCH   1023
 #define RMT_LL_MAX_FILTER_VALUE           255
 #define RMT_LL_MAX_IDLE_VALUE             32767
+
+// Maximum values due to limited register bit width
+#define RMT_LL_CHANNEL_CLOCK_MAX_PRESCALE 256
+#define RMT_LL_GROUP_CLOCK_MAX_INTEGER_PRESCALE 256
+#define RMT_LL_GROUP_CLOCK_MAX_FRACTAL_PRESCALE 64
 
 typedef enum {
     RMT_LL_MEM_OWNER_SW = 0,
@@ -133,7 +139,7 @@ static inline void rmt_ll_enable_mem_access_nonfifo(rmt_dev_t *dev, bool enable)
  * @param divider_numerator Numerator part of the divider
  */
 static inline void rmt_ll_set_group_clock_src(rmt_dev_t *dev, uint32_t channel, rmt_clock_source_t src,
-        uint32_t divider_integral, uint32_t divider_denominator, uint32_t divider_numerator)
+                                              uint32_t divider_integral, uint32_t divider_denominator, uint32_t divider_numerator)
 {
     // Formula: rmt_sclk = module_clock_src / (1 + div_num + div_a / div_b)
     (void)channel; // the source clock is set for all channels

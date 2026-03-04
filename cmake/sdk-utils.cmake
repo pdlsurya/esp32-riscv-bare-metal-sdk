@@ -35,6 +35,6 @@ function(sdk_config target)
     # Add the SDK
     add_subdirectory(${SDK_PATH} ${CMAKE_CURRENT_BINARY_DIR}/sdk_build)
     # Link the SDK
-    target_link_libraries(${target} PRIVATE esp32c6_sdk)
+    target_link_libraries(${target} PRIVATE esp32_rv_sdk)
 
 endfunction(sdk_config)
