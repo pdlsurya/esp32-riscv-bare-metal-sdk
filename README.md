@@ -1,4 +1,4 @@
-# ESP32-C6 Bare-Metal SDK
+# ESP32 RISC-V Bare-Metal SDK
 
 A minimal **bare-metal SDK for Espressif ESP32 RISC-V microcontrollers**, developed without relying on the ESP-IDF.  
 This SDK provides low-level access to ESP32 hardware, enabling firmware development using **direct register-level programming, custom startup code, and linker scripts** with minimal abstraction.
