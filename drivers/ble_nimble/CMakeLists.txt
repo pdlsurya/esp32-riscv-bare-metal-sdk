@@ -51,6 +51,15 @@ list(APPEND BLE_NIMBLE_SOURCES
 
 target_sources(esp32_rv_sdk PUBLIC ${BLE_NIMBLE_SOURCES})
 
+# Recent esp-nimble revisions use esp_err_t and ESP_ERR_* from transport and
+# host sources without including esp_err.h themselves. Since the SDK builds all
+# sources into one target, inject the header for C compilation here instead of
+# patching the submodule.
+target_compile_options(esp32_rv_sdk PUBLIC
+    $<$<COMPILE_LANGUAGE:C>:-include>
+    $<$<COMPILE_LANGUAGE:C>:esp_err.h>
+)
+
 target_include_directories(esp32_rv_sdk PUBLIC
     ${BLE_NIMBLE_DIR}
     ${BLE_NIMBLE_DIR}/include

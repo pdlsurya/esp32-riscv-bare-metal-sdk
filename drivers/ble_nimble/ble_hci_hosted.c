@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "esp_err.h"
 #include "esp_hosted.h"
 #include "esp_log.h"
 #include "esp_nimble_mem.h"
