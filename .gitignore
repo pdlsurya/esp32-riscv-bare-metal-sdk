@@ -24,15 +24,13 @@ $RECYCLE.BIN/
 
 
 # Build system directories
-**/build.sh
 **/build/
+**/build-*/
+**/build_*/
 /bin/
 /obj/
 /debug/
 /release/
-
-#any example build files
-examples/
 
 # CMake (if used)
 CMakeLists.txt.user
