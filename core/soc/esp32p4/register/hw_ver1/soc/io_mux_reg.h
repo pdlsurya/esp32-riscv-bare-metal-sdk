@@ -410,7 +410,7 @@
 #define FUNC_GPIO39_SD1_CDATA0_PAD                                       0
 
 #define PERIPHS_IO_MUX_U_PAD_GPIO40               (REG_IO_MUX_BASE + 0xA4)
-#define FUNC_GPIO40_DBG_PSRAM_DQ9_PAD                                    4
+#define FUNC_GPIO40_DBG_PSRAM_DQ9_PAD                                    4 
 #define FUNC_GPIO40_EMAC_PHY_TXEN_PAD                                    3
 #define FUNC_GPIO40_BIST_PAD                                             2
 #define FUNC_GPIO40_GPIO40                                               1

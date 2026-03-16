@@ -114,7 +114,7 @@ static inline void sdmmc_ll_enable_bus_clock(sdmmc_dev_t *hw, bool en)
 
 /// use a macro to wrap the function, force the caller to use it in a critical section
 /// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
-#define sdmmc_ll_enable_bus_clock(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_enable_bus_clock(__VA_ARGS__)
+//#define sdmmc_ll_enable_bus_clock(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_enable_bus_clock(__VA_ARGS__)
 
 /**
  * @brief Reset the SDMMC module
@@ -129,7 +129,7 @@ static inline void sdmmc_ll_reset_register(sdmmc_dev_t *hw)
 
 /// use a macro to wrap the function, force the caller to use it in a critical section
 /// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
-#define sdmmc_ll_reset_register(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_reset_register(__VA_ARGS__)
+//#define sdmmc_ll_reset_register(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_reset_register(__VA_ARGS__)
 
 /**
  * @brief Enable the bus clock for SDIO PLL
@@ -160,7 +160,7 @@ static inline void sdmmc_ll_enable_sdio_pll(sdmmc_dev_t *hw, bool en)
 
 /// use a macro to wrap the function, force the caller to use it in a critical section
 /// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
-#define sdmmc_ll_enable_sdio_pll(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_enable_sdio_pll(__VA_ARGS__)
+//#define sdmmc_ll_enable_sdio_pll(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_enable_sdio_pll(__VA_ARGS__)
 
 /**
  * @brief Select SDMMC clock source
@@ -189,7 +189,7 @@ static inline void sdmmc_ll_select_clk_source(sdmmc_dev_t *hw, soc_periph_sdmmc_
 
 /// use a macro to wrap the function, force the caller to use it in a critical section
 /// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
-#define sdmmc_ll_select_clk_source(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_select_clk_source(__VA_ARGS__)
+//#define sdmmc_ll_select_clk_source(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_select_clk_source(__VA_ARGS__)
 
 /**
  * @brief Set SDMMC clock div
@@ -215,7 +215,7 @@ static inline void sdmmc_ll_set_clock_div(sdmmc_dev_t *hw, uint32_t div)
 
 /// use a macro to wrap the function, force the caller to use it in a critical section
 /// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
-#define sdmmc_ll_set_clock_div(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_set_clock_div(__VA_ARGS__)
+//#define sdmmc_ll_set_clock_div(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_set_clock_div(__VA_ARGS__)
 
 /**
  * @brief Deinit clock
@@ -269,7 +269,7 @@ static inline void sdmmc_ll_init_phase_delay(sdmmc_dev_t *hw)
 
 /// use a macro to wrap the function, force the caller to use it in a critical section
 /// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
-#define sdmmc_ll_init_phase_delay(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_init_phase_delay(__VA_ARGS__)
+//#define sdmmc_ll_init_phase_delay(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_init_phase_delay(__VA_ARGS__)
 
 /**
  * @brief Set SDMMC din delay
@@ -297,7 +297,7 @@ static inline void sdmmc_ll_set_din_delay(sdmmc_dev_t *hw, sdmmc_ll_delay_phase_
 
 /// use a macro to wrap the function, force the caller to use it in a critical section
 /// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
-#define sdmmc_ll_set_din_delay(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_set_din_delay(__VA_ARGS__)
+//#define sdmmc_ll_set_din_delay(...) (void)__DECLARE_RCC_ATOMIC_ENV; sdmmc_ll_set_din_delay(__VA_ARGS__)
 
 /**
  * @brief Enable card clock
