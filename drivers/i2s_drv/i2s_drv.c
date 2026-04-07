@@ -82,7 +82,7 @@
 #endif
 
 #if I2S_DRV_DEBUG_LOG
-#define I2S_LOG(fmt, ...) serial_printf("[i2s] " fmt "\r\n", ##__VA_ARGS__)
+#define I2S_LOG(fmt, ...) printf("[i2s] " fmt "\r\n", ##__VA_ARGS__)
 #else
 #define I2S_LOG(...)
 #endif
@@ -223,7 +223,7 @@ static void i2s_stream_log_desc_error(i2s_dev_handle_t *dev, uint32_t dma_status
         eof_desc = I2S_DMA_TX_GET_EOF_DESC(dma, dev->dma_channel);
     }
 
-    serial_printf("[i2s][err] %s st=0x%08lx ch=%u q=%u/%u h=%u t=%u started=%d idle=%d cur=0x%08lx eof=0x%08lx tail=0x%08lx owner=%lu len=%lu sz=%lu next=0x%08lx buf=0x%08lx\r\n",
+    printf("[i2s][err] %s st=0x%08lx ch=%u q=%u/%u h=%u t=%u started=%d idle=%d cur=0x%08lx eof=0x%08lx tail=0x%08lx owner=%lu len=%lu sz=%lu next=0x%08lx buf=0x%08lx\r\n",
                   where,
                   (unsigned long)dma_status,
                   dev->dma_channel,

@@ -33,12 +33,12 @@ u32_t lwip_hosted_rand(void);
 #define PACK_STRUCT_BEGIN
 #define PACK_STRUCT_END
 
-#define LWIP_PLATFORM_DIAG(x) serial_printf x
+#define LWIP_PLATFORM_DIAG(x) printf x
 #define LWIP_RAND lwip_hosted_rand
 #define LWIP_PLATFORM_ASSERT(x)                             \
     do                                                      \
     {                                                       \
-        serial_printf("[lwip] assert: %s\n", (x));         \
+        printf("[lwip] assert: %s\n", (x));         \
         while (1)                                           \
         {                                                   \
         }                                                   \

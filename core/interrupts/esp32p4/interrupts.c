@@ -81,7 +81,7 @@ __attribute__((interrupt, weak)) TCM_IRAM_ATTR void m_timer_interrupt_handler()
 __attribute__((interrupt, weak)) TCM_IRAM_ATTR void m_software_interrupt_handler()
 {
     msi_clear();
-    serial_printf("Machine software interrupt from core->%d\n", rv_utils_get_core_id());
+    printf("Machine software interrupt from core->%d\n", rv_utils_get_core_id());
 }
 
 /**
@@ -155,7 +155,7 @@ __attribute__((section(".exception_handler"), aligned(64), interrupt)) void exce
     }
     else
     {
-        serial_printf("Core %d panicked!\nException Id =%ld\nmtval=%lx\nmepc=%lx\n", rv_utils_get_core_id(), code, mtval, mepc);
+        printf("Core %d panicked!\nException Id =%ld\nmtval=%lx\nmepc=%lx\n", rv_utils_get_core_id(), code, mtval, mepc);
 
         esp_rom_software_reset_system();
     }

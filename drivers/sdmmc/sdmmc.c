@@ -113,7 +113,7 @@
 #endif
 
 #if SDMMC_DEBUG
-#define SDMMC_LOG(...) serial_printf(__VA_ARGS__)
+#define SDMMC_LOG(...) printf(__VA_ARGS__)
 #else
 #define SDMMC_LOG(...) ((void)0)
 #endif

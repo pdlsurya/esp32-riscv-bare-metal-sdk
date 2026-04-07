@@ -107,14 +107,14 @@ static void lwip_hosted_rx_input(const esp_hosted_frame_info_t *info,
     p = pbuf_alloc(PBUF_RAW, (u16_t)len, PBUF_POOL);
     if (p == NULL)
     {
-        serial_printf("[lwip] rx drop: pbuf alloc len=%u\n", (unsigned)len);
+        printf("[lwip] rx drop: pbuf alloc len=%u\n", (unsigned)len);
         return;
     }
 
     if (pbuf_take(p, payload, len) != ERR_OK)
     {
         pbuf_free(p);
-        serial_printf("[lwip] rx drop: pbuf take len=%u\n", (unsigned)len);
+        printf("[lwip] rx drop: pbuf take len=%u\n", (unsigned)len);
         return;
     }
 
@@ -122,7 +122,7 @@ static void lwip_hosted_rx_input(const esp_hosted_frame_info_t *info,
     if (rc != ERR_OK)
     {
         pbuf_free(p);
-        serial_printf("[lwip] rx drop: input rc=%d len=%u\n", (int)rc, (unsigned)len);
+        printf("[lwip] rx drop: input rc=%d len=%u\n", (int)rc, (unsigned)len);
     }
 }
 

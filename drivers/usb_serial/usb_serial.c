@@ -55,45 +55,6 @@ int serial_write(const char *buf, size_t len)
     return serial_write_bytes(buf, len);
 }
 
-int serial_vprintf(const char *format, va_list args)
-{
-    char buf[256] = {0};
-    int size;
-
-    if (format == NULL)
-    {
-        return -1;
-    }
-
-    size = vsnprintf(buf, sizeof(buf), format, args);
-    if (size < 0)
-    {
-        return size;
-    }
-    if ((size_t)size >= sizeof(buf))
-    {
-        size = (int)(sizeof(buf) - 1U);
-    }
-
-    if (serial_write_bytes(buf, (size_t)size) < 0)
-    {
-        return -1;
-    }
-
-    return size;
-}
-
-int serial_printf(const char *format, ...)
-{
-    int size;
-    va_list args;
-
-    va_start(args, format);
-    size = serial_vprintf(format, args);
-    va_end(args);
-    return size;
-}
-
 /**
  * @brief read a string from usb serial
  *

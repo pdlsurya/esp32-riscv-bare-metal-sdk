@@ -13,7 +13,7 @@ int main(void)
     uint32_t step = 0U;
 
     delay_ms(200U);
-    serial_printf("ESP32-P4 blink + WS2812 example\n");
+    printf("ESP32 blink + WS2812 example\n");
 
     gpio_set_direction(LED_GPIO_PIN, GPIO_OUTPUT);
     gpio_write(LED_GPIO_PIN, 0U);
@@ -28,22 +28,22 @@ int main(void)
         {
             case 0U:
                 ws2812_write((ws2812_color_t)WS2812_COLOR_RED);
-                serial_printf("[blink_ws2812] led=RED\n");
+                printf("[blink_ws2812] led=RED\n");
                 break;
 
             case 1U:
                 ws2812_write((ws2812_color_t)WS2812_COLOR_GREEN);
-                serial_printf("[blink_ws2812] led=GREEN\n");
+                printf("[blink_ws2812] led=GREEN\n");
                 break;
 
             case 2U:
                 ws2812_write((ws2812_color_t)WS2812_COLOR_BLUE);
-                serial_printf("[blink_ws2812] led=BLUE\n");
+                printf("[blink_ws2812] led=BLUE\n");
                 break;
 
             default:
                 ws2812_write((ws2812_color_t)WS2812_COLOR_BLACK);
-                serial_printf("[blink_ws2812] led=OFF\n");
+                printf("[blink_ws2812] led=OFF\n");
                 break;
         }
 

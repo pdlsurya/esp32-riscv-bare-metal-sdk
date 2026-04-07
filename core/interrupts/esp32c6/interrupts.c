@@ -5,10 +5,11 @@
 #include "usb_serial.h"
 #include "interrupts.h"
 #include "esp_rom_sys.h"
+#include "delay.h"
 
 #define INTERRUPT_HANDLER_COUNT 32U
-#define MCAUSE_INTERRUPT_BIT    0x80000000UL
-#define EXCEPTION_PC_ADVANCE    4U
+#define MCAUSE_INTERRUPT_BIT 0x80000000UL
+#define EXCEPTION_PC_ADVANCE 4U
 
 /**
  * @brief Interrupt handler table
@@ -137,7 +138,8 @@ __attribute__((interrupt)) IRAM_ATTR void exception_handler()
     }
     else
     {
-        serial_printf("Core panicked!\nException Id =%ld\nmtval=%lx\nmepc=%lx\n", mcause, mtval, mepc);
+        printf("Core panicked!\nException Id =%ld\nmtval=%lx\nmepc=%lx\n", mcause, mtval, mepc);
+
         esp_rom_software_reset_cpu(0);
     }
 }
