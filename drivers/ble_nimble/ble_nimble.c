@@ -13,6 +13,12 @@
 
 static const char *TAG = "ble_nimble";
 
+/*
+ * Recent esp-nimble revisions keep ble_store_ram_init() implemented in the
+ * RAM store module, but no longer declare it in ble_store_ram.h.
+ */
+void ble_store_ram_init(void);
+
 static ble_nimble_config_t s_cfg;
 static bool s_initialized;
 static bool s_synced;
