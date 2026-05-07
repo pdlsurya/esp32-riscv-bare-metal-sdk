@@ -84,8 +84,8 @@ static bool sdfat32_usb_msc_init(void)
 #define SDFAT32_SD_SECTOR_SIZE() (usb_msc_sector_size())
 #endif
 
-static uint32_t bootSecStartLBA;
-static uint32_t fsInfoSecLBA;
+static uint32_t bootSecStartLba;
+static uint32_t fsInfoSecLba;
 static bootSecParams_t params;
 static uint8_t sdBuffer[512] __attribute__((aligned(4)));
 
@@ -100,7 +100,7 @@ static uint32_t DataSectorsCnt;
 
 static char *months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
-static uint32_t read_le32(const uint8_t *p)
+static uint32_t readLe32(const uint8_t *p)
 {
 	return ((uint32_t)p[0]) |
 		   ((uint32_t)p[1] << 8) |
@@ -108,14 +108,14 @@ static uint32_t read_le32(const uint8_t *p)
 		   ((uint32_t)p[3] << 24);
 }
 
-bool mbr_get_partition_start_lba(uint8_t *mbr, int part_index, uint32_t *start_lba)
+bool mbrGetPartitionStartLba(uint8_t *mbr, int partIndex, uint32_t *startLba)
 {
-	if (mbr == 0 || start_lba == 0)
+	if (mbr == 0 || startLba == 0)
 	{
 		return false;
 	}
 
-	if (part_index < 0 || part_index > 3)
+	if (partIndex < 0 || partIndex > 3)
 	{
 		return false;
 	}
@@ -127,7 +127,7 @@ bool mbr_get_partition_start_lba(uint8_t *mbr, int part_index, uint32_t *start_l
 		return false;
 	}
 
-	const uint8_t *entry = &mbr[PARTITION_TABLE_OFFSET + (part_index * PARTITION_ENTRY_SIZE)];
+	const uint8_t *entry = &mbr[PARTITION_TABLE_OFFSET + (partIndex * PARTITION_ENTRY_SIZE)];
 
 	/* Optional: check partition type is non-zero */
 	if (entry[4] == 0x00)
@@ -135,7 +135,7 @@ bool mbr_get_partition_start_lba(uint8_t *mbr, int part_index, uint32_t *start_l
 		return false; /* empty partition entry */
 	}
 
-	*start_lba = read_le32(&entry[8]);
+	*startLba = readLe32(&entry[8]);
 	return true;
 }
 
@@ -146,7 +146,7 @@ bool mbr_get_partition_start_lba(uint8_t *mbr, int part_index, uint32_t *start_l
  */
 static bool getBootSecParams(void)
 {
-	if (SDFAT32_SD_READ_SECTOR(bootSecStartLBA, sdBuffer))
+	if (SDFAT32_SD_READ_SECTOR(bootSecStartLba, sdBuffer))
 	{
 		params.BPB_BytesPerSec = sdBuffer[11] | (sdBuffer[12] << 8);
 		params.BPB_SecPerClus = sdBuffer[13];
@@ -1273,7 +1273,7 @@ static uint8_t getChecksum(file *entry)
 static bool updateFSInfo(uint32_t nxtFreeClus)
 {
 	// Read the FSInfo sector from the SD card
-	if (SDFAT32_SD_READ_SECTOR(fsInfoSecLBA, sdBuffer))
+	if (SDFAT32_SD_READ_SECTOR(fsInfoSecLba, sdBuffer))
 	{
 		FSInfo_t *p_fsinfo = (FSInfo_t *)sdBuffer;
 
@@ -1282,7 +1282,7 @@ static bool updateFSInfo(uint32_t nxtFreeClus)
 		p_fsinfo->FSI_Free_Count--;
 
 		// Write the updated FSInfo sector back to the SD card
-		if (SDFAT32_SD_WRITE_SECTOR(fsInfoSecLBA, sdBuffer))
+		if (SDFAT32_SD_WRITE_SECTOR(fsInfoSecLba, sdBuffer))
 		{
 			return true;
 		}
@@ -1308,7 +1308,7 @@ static bool updateFSInfo(uint32_t nxtFreeClus)
 static uint32_t getNextFreeCluster()
 {
 	// Read the FSInfo sector from the SD card
-	if (SDFAT32_SD_READ_SECTOR(fsInfoSecLBA, sdBuffer))
+	if (SDFAT32_SD_READ_SECTOR(fsInfoSecLba, sdBuffer))
 	{
 		FSInfo_t *p_fsinfo = (FSInfo_t *)sdBuffer;
 		uint32_t nxtFreeClus = p_fsinfo->FSI_Nxt_Free;
@@ -1885,9 +1885,9 @@ bool sdFat32Init()
 
 	if (SDFAT32_SD_READ_SECTOR(0, sdBuffer))
 	{
-		if (mbr_get_partition_start_lba(sdBuffer, 0, &bootSecStartLBA))
+		if (mbrGetPartitionStartLba(sdBuffer, 0, &bootSecStartLba))
 		{
-			fsInfoSecLBA = bootSecStartLBA + 1;
+			fsInfoSecLba = bootSecStartLba + 1;
 		}
 		else
 		{
@@ -1903,7 +1903,7 @@ bool sdFat32Init()
 	if (getBootSecParams())
 	{
 		// Calculate FAT start sector
-		FatStartSector = bootSecStartLBA + params.BPB_RsvdSecCnt; // 0X2020
+		FatStartSector = bootSecStartLba + params.BPB_RsvdSecCnt; // 0X2020
 
 		// Calculate FAT sectors count
 		FatSectorsCnt = params.BPB_FATSz32 * params.BPB_NumFATs;
