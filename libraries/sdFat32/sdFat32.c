@@ -45,7 +45,7 @@
 #define PARTITION_TABLE_OFFSET 446
 #define PARTITION_ENTRY_SIZE 16
 
-#define PRINTF(...) serial_printf(__VA_ARGS__)
+#define PRINTF(...) printf(__VA_ARGS__)
 
 #if SDFAT32_SD_BACKEND == SDFAT32_SD_BACKEND_SDMMC
 #define SDFAT32_SD_INIT() (sdmmc_init() == SDMMC_OK)

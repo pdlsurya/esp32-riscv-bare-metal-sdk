@@ -154,12 +154,12 @@
 #endif
 
 #if ESP_HOSTED_CTRL_DEBUG
-#define ESP_HOSTED_CTRL_LOG(...) serial_printf(__VA_ARGS__)
+#define ESP_HOSTED_CTRL_LOG(...) printf(__VA_ARGS__)
 #else
 #define ESP_HOSTED_CTRL_LOG(...) ((void)0)
 #endif
 
-#define ESP_HOSTED_CTRL_ERR(...) serial_printf("[hosted_ctrl] " __VA_ARGS__)
+#define ESP_HOSTED_CTRL_ERR(...) printf("[hosted_ctrl] " __VA_ARGS__)
 
 typedef enum
 {

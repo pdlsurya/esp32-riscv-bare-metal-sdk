@@ -112,12 +112,12 @@
 #endif
 
 #if ESP_HOSTED_SDIO_DEBUG
-#define ESP_HOSTED_SDIO_LOG(...) serial_printf(__VA_ARGS__)
+#define ESP_HOSTED_SDIO_LOG(...) printf(__VA_ARGS__)
 #else
 #define ESP_HOSTED_SDIO_LOG(...) ((void)0)
 #endif
 
-#define ESP_HOSTED_SDIO_ERR(...) serial_printf("[esp_hosted_sdio] " __VA_ARGS__)
+#define ESP_HOSTED_SDIO_ERR(...) printf("[esp_hosted_sdio] " __VA_ARGS__)
 
 typedef enum
 {

@@ -112,7 +112,7 @@ static void tcp_client_err_cb(void *arg, err_t err)
     (void)arg;
     (void)err;
     s_tcp_client_pcb = NULL;
-    serial_printf("[tcp] client closed\n");
+    printf("[tcp] client closed\n");
 }
 
 static err_t tcp_client_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
@@ -138,7 +138,7 @@ static err_t tcp_client_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
             s_tcp_client_pcb = NULL;
         }
         tcp_client_close(tpcb);
-        serial_printf("[tcp] client disconnected\n");
+        printf("[tcp] client disconnected\n");
         return ERR_OK;
     }
 
@@ -153,7 +153,7 @@ static err_t tcp_client_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
         pbuf_copy_partial(p, buf, copy_len, 0U);
     }
     buf[copy_len] = '\0';
-    serial_printf("[tcp] rx len=%u msg=\"%s\"\n", (unsigned)p->tot_len, buf);
+    printf("[tcp] rx len=%u msg=\"%s\"\n", (unsigned)p->tot_len, buf);
 
     tcp_recved(tpcb, p->tot_len);
     pbuf_free(p);
@@ -179,7 +179,7 @@ static err_t tcp_server_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err)
     tcp_arg(newpcb, NULL);
     tcp_recv(newpcb, tcp_client_recv_cb);
     tcp_err(newpcb, tcp_client_err_cb);
-    serial_printf("[tcp] client connected\n");
+    printf("[tcp] client connected\n");
     return ERR_OK;
 }
 
@@ -197,7 +197,7 @@ static bool tcp_rx_server_start(void)
     pcb = tcp_new();
     if (pcb == NULL)
     {
-        serial_printf("[tcp] alloc failed\n");
+        printf("[tcp] alloc failed\n");
         return false;
     }
 
@@ -205,7 +205,7 @@ static bool tcp_rx_server_start(void)
     if (rc != ERR_OK)
     {
         tcp_close(pcb);
-        serial_printf("[tcp] bind failed rc=%d\n", (int)rc);
+        printf("[tcp] bind failed rc=%d\n", (int)rc);
         return false;
     }
 
@@ -213,14 +213,14 @@ static bool tcp_rx_server_start(void)
     if (listen_pcb == NULL)
     {
         tcp_abort(pcb);
-        serial_printf("[tcp] listen failed\n");
+        printf("[tcp] listen failed\n");
         return false;
     }
 
     s_tcp_listen_pcb = listen_pcb;
     tcp_accept(s_tcp_listen_pcb, tcp_server_accept_cb);
     s_tcp_server_started = true;
-    serial_printf("[tcp] listening on port %u\n", (unsigned)TCP_RX_PORT);
+    printf("[tcp] listening on port %u\n", (unsigned)TCP_RX_PORT);
     return true;
 }
 
@@ -273,7 +273,7 @@ static void ble_on_host_reset(int reason)
     s_ble_conn_handle = BLE_HS_CONN_HANDLE_NONE;
     s_ble_sync_announced = false;
     ble_schedule_adv_restart(BLE_ADV_RESTART_DELAY_MS);
-    serial_printf("[ble] host reset reason=%d\n", reason);
+    printf("[ble] host reset reason=%d\n", reason);
 }
 
 static void ble_on_host_sync(void)
@@ -376,7 +376,7 @@ static void wifi_netif_status_cb(struct netif *netif)
         {
             ip4_addr_copy(s_wifi_last_addr, *netif_ip4_addr(netif));
             ip4addr_ntoa_r(netif_ip4_addr(netif), ip_buf, sizeof(ip_buf));
-            serial_printf("[wifi] ip=%s\n", ip_buf);
+            printf("[wifi] ip=%s\n", ip_buf);
             (void)tcp_rx_server_start();
             s_wifi_ip_announced = true;
         }
@@ -386,7 +386,7 @@ static void wifi_netif_status_cb(struct netif *netif)
         ip4_addr_set_zero(&s_wifi_last_addr);
         s_wifi_ip_announced = false;
         tcp_rx_server_stop();
-        serial_printf("[wifi] ip cleared\n");
+        printf("[wifi] ip cleared\n");
     }
 }
 
@@ -399,7 +399,7 @@ static void hosted_wifi_event_cb(esp_hosted_wifi_event_t event, const void *even
         case ESP_HOSTED_WIFI_EVENT_STA_CONNECTED:
         {
             const esp_hosted_wifi_sta_connected_t *connected = (const esp_hosted_wifi_sta_connected_t *)event_data;
-            serial_printf("[wifi] sta connected ssid=\"%.*s\" channel=%lu aid=%lu\n",
+            printf("[wifi] sta connected ssid=\"%.*s\" channel=%lu aid=%lu\n",
                           connected != NULL ? (int)connected->ssid_len : 0,
                           connected != NULL ? (const char *)connected->ssid : "",
                           connected != NULL ? (unsigned long)connected->channel : 0UL,
@@ -411,7 +411,7 @@ static void hosted_wifi_event_cb(esp_hosted_wifi_event_t event, const void *even
         case ESP_HOSTED_WIFI_EVENT_STA_DISCONNECTED:
         {
             const esp_hosted_wifi_sta_disconnected_t *disconnected = (const esp_hosted_wifi_sta_disconnected_t *)event_data;
-            serial_printf("[wifi] sta disconnected reason=%lu rssi=%ld\n",
+            printf("[wifi] sta disconnected reason=%lu rssi=%ld\n",
                           disconnected != NULL ? (unsigned long)disconnected->reason : 0UL,
                           disconnected != NULL ? (long)disconnected->rssi : 0L);
             lwip_hosted_set_link_down();
@@ -453,7 +453,7 @@ static bool hosted_wifi_start(void)
 
     if (!lwip_hosted_init(&lwip_cfg))
     {
-        serial_printf("[wifi] lwip init failed\n");
+        printf("[wifi] lwip init failed\n");
         return false;
     }
     lwip_ready = true;
@@ -469,27 +469,27 @@ static bool hosted_wifi_start(void)
     rc = esp_hosted_wifi_init_default(WIFI_CTRL_TIMEOUT_MS);
     if (rc != ESP_HOSTED_CTRL_OK)
     {
-        serial_printf("[wifi] wifi init failed rc=%d\n", rc);
+        printf("[wifi] wifi init failed rc=%d\n", rc);
         goto fail;
     }
 
     rc = esp_hosted_wifi_set_mode(ESP_HOSTED_WIFI_MODE_STA, WIFI_CTRL_TIMEOUT_MS);
     if (rc != ESP_HOSTED_CTRL_OK)
     {
-        serial_printf("[wifi] set mode failed rc=%d\n", rc);
+        printf("[wifi] set mode failed rc=%d\n", rc);
         goto fail;
     }
 
     rc = esp_hosted_wifi_get_mac(ESP_HOSTED_WIFI_IF_STA, mac, 1500U);
     if (rc == ESP_HOSTED_CTRL_OK)
     {
-        serial_printf("[wifi] sta mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
+        printf("[wifi] sta mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
                       mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         lwip_hosted_set_mac(mac);
     }
     else
     {
-        serial_printf("[wifi] get mac failed rc=%d (0x%08lx)\n",
+        printf("[wifi] get mac failed rc=%d (0x%08lx)\n",
                       rc,
                       (unsigned long)(uint32_t)rc);
     }
@@ -497,25 +497,25 @@ static bool hosted_wifi_start(void)
     rc = esp_hosted_wifi_set_sta_config(WIFI_STA_SSID, WIFI_STA_PASSWORD, WIFI_CTRL_TIMEOUT_MS);
     if (rc != ESP_HOSTED_CTRL_OK)
     {
-        serial_printf("[wifi] set config failed rc=%d\n", rc);
+        printf("[wifi] set config failed rc=%d\n", rc);
         goto fail;
     }
 
     rc = esp_hosted_wifi_start(WIFI_CTRL_TIMEOUT_MS);
     if (rc != ESP_HOSTED_CTRL_OK)
     {
-        serial_printf("[wifi] wifi start failed rc=%d\n", rc);
+        printf("[wifi] wifi start failed rc=%d\n", rc);
         goto fail;
     }
 
     rc = esp_hosted_wifi_connect(WIFI_CTRL_TIMEOUT_MS);
     if (rc != ESP_HOSTED_CTRL_OK)
     {
-        serial_printf("[wifi] wifi connect failed rc=%d\n", rc);
+        printf("[wifi] wifi connect failed rc=%d\n", rc);
         goto fail;
     }
 
-    serial_printf("[wifi] connecting to \"%s\" with lwIP DHCP\n", WIFI_STA_SSID);
+    printf("[wifi] connecting to \"%s\" with lwIP DHCP\n", WIFI_STA_SSID);
     return true;
 
 fail:
@@ -533,7 +533,7 @@ static bool sdio_try_attach(esp_hosted_sdio_config_t *cfg, const char *label)
         return false;
     }
 
-    serial_printf("[sdio] try %s slot=%u width=%u clk=%u kHz pullups=%u\n",
+    printf("[sdio] try %s slot=%u width=%u clk=%u kHz pullups=%u\n",
                   label,
                   (unsigned)cfg->slot,
                   (unsigned)cfg->bus_width,
@@ -569,13 +569,13 @@ static bool hosted_send_init_response(uint8_t chip_id)
     written = esp_hosted_priv_tx(HOSTED_PRIV_PKT_EVENT, buf, sizeof(buf));
     if (written != sizeof(buf))
     {
-        serial_printf("[hosted] init response failed wrote=%u need=%u\n",
+        printf("[hosted] init response failed wrote=%u need=%u\n",
                       (unsigned)written,
                       (unsigned)sizeof(buf));
         return false;
     }
 
-    serial_printf("[hosted] init response sent chip=0x%02x\n", chip_id);
+    printf("[hosted] init response sent chip=0x%02x\n", chip_id);
     return true;
 }
 
@@ -597,7 +597,7 @@ static void hosted_priv_rx(const esp_hosted_frame_info_t *info,
 
     if (payload[0] != HOSTED_PRIV_EVENT_INIT)
     {
-        serial_printf("[hosted] priv event type=0x%02x len=%u\n",
+        printf("[hosted] priv event type=0x%02x len=%u\n",
                       (unsigned)payload[0],
                       (unsigned)len);
         return;
@@ -605,7 +605,7 @@ static void hosted_priv_rx(const esp_hosted_frame_info_t *info,
 
     if (len < (size_t)(2U + payload[1]))
     {
-        serial_printf("[hosted] short init event len=%u need=%u\n",
+        printf("[hosted] short init event len=%u need=%u\n",
                       (unsigned)len,
                       (unsigned)(2U + payload[1]));
         return;
@@ -649,7 +649,7 @@ static void hosted_priv_rx(const esp_hosted_frame_info_t *info,
         remaining -= (size_t)tag_len + 2U;
     }
 
-    serial_printf("[hosted] init cap=0x%02x ext=0x%08lx chip=0x%02x sdio=%s\n",
+    printf("[hosted] init cap=0x%02x ext=0x%08lx chip=0x%02x sdio=%s\n",
                   (unsigned)s_hosted_slave_cap,
                   (unsigned long)s_hosted_slave_ext_cap,
                   (unsigned)s_hosted_slave_chip_id,
@@ -698,7 +698,7 @@ static int ble_demo_text_access(uint16_t conn_handle,
 
             s_demo_text[value_len] = '\0';
             s_demo_text_len = value_len;
-            serial_printf("[gatt] text=\"%s\"\n", s_demo_text);
+            printf("[gatt] text=\"%s\"\n", s_demo_text);
             return 0;
 
         default:
@@ -713,18 +713,18 @@ static bool ble_demo_gatt_init(void)
     rc = ble_gatts_count_cfg(s_demo_svcs);
     if (rc != 0)
     {
-        serial_printf("[gatt] count cfg failed rc=%d\n", rc);
+        printf("[gatt] count cfg failed rc=%d\n", rc);
         return false;
     }
 
     rc = ble_gatts_add_svcs(s_demo_svcs);
     if (rc != 0)
     {
-        serial_printf("[gatt] add svcs failed rc=%d\n", rc);
+        printf("[gatt] add svcs failed rc=%d\n", rc);
         return false;
     }
 
-    serial_printf("[gatt] service=0x%04x char=0x%04x read/write text\n",
+    printf("[gatt] service=0x%04x char=0x%04x read/write text\n",
                   (unsigned)BLE_DEMO_SERVICE_UUID,
                   (unsigned)BLE_DEMO_TEXT_CHAR_UUID);
     return true;
@@ -748,19 +748,19 @@ static int ble_gap_event_cb(struct ble_gap_event *event, void *arg)
                 s_ble_adv_start_pending = false;
                 s_ble_adv_started = false;
                 s_ble_adv_retry_delay_ms = 0U;
-                serial_printf("[ble] connected handle=%u\n", event->connect.conn_handle);
+                printf("[ble] connected handle=%u\n", event->connect.conn_handle);
             }
             else
             {
                 s_ble_conn_handle = BLE_HS_CONN_HANDLE_NONE;
-                serial_printf("[ble] connect failed status=%d\n", event->connect.status);
+                printf("[ble] connect failed status=%d\n", event->connect.status);
                 ble_schedule_adv_restart(BLE_ADV_RESTART_DELAY_MS);
             }
             break;
 
         case BLE_GAP_EVENT_DISCONNECT:
             s_ble_conn_handle = BLE_HS_CONN_HANDLE_NONE;
-            serial_printf("[ble] disconnected reason=%d\n", event->disconnect.reason);
+            printf("[ble] disconnected reason=%d\n", event->disconnect.reason);
             ble_schedule_adv_restart(BLE_ADV_RESTART_DELAY_MS);
             break;
 
@@ -768,19 +768,19 @@ static int ble_gap_event_cb(struct ble_gap_event *event, void *arg)
             s_ble_adv_started = false;
             if (s_ble_conn_handle == BLE_HS_CONN_HANDLE_NONE)
             {
-                serial_printf("[ble] adv complete reason=%d\n", event->adv_complete.reason);
+                printf("[ble] adv complete reason=%d\n", event->adv_complete.reason);
                 ble_schedule_adv_restart(BLE_ADV_RESTART_DELAY_MS);
             }
             break;
 
         case BLE_GAP_EVENT_CONN_UPDATE:
-            serial_printf("[ble] conn update status=%d handle=%u\n",
+            printf("[ble] conn update status=%d handle=%u\n",
                           event->conn_update.status,
                           event->conn_update.conn_handle);
             break;
 
         case BLE_GAP_EVENT_MTU:
-            serial_printf("[ble] mtu=%u handle=%u\n",
+            printf("[ble] mtu=%u handle=%u\n",
                           event->mtu.value,
                           event->mtu.conn_handle);
             break;
@@ -801,14 +801,14 @@ static bool ble_start_advertising(void)
     rc = ble_hs_util_ensure_addr(0);
     if (rc != 0)
     {
-        serial_printf("[ble] ensure addr failed rc=%d\n", rc);
+        printf("[ble] ensure addr failed rc=%d\n", rc);
         return false;
     }
 
     rc = ble_hs_id_infer_auto(0, &s_ble_addr_type);
     if (rc != 0)
     {
-        serial_printf("[ble] infer addr type failed rc=%d\n", rc);
+        printf("[ble] infer addr type failed rc=%d\n", rc);
         return false;
     }
 
@@ -823,7 +823,7 @@ static bool ble_start_advertising(void)
     rc = ble_gap_adv_set_fields(&fields);
     if (rc != 0)
     {
-        serial_printf("[ble] adv fields failed rc=%d\n", rc);
+        printf("[ble] adv fields failed rc=%d\n", rc);
         return false;
     }
 
@@ -838,12 +838,12 @@ static bool ble_start_advertising(void)
                            NULL);
     if (rc != 0)
     {
-        serial_printf("[ble] adv start failed rc=%d\n", rc);
+        printf("[ble] adv start failed rc=%d\n", rc);
         s_ble_adv_retry_delay_ms = 250U;
         return false;
     }
 
-    serial_printf("[ble] advertising as \"%s\"\n", BLE_DEVICE_NAME);
+    printf("[ble] advertising as \"%s\"\n", BLE_DEVICE_NAME);
     s_ble_adv_started = true;
     s_ble_adv_start_pending = false;
     s_ble_adv_retry_delay_ms = 0U;
@@ -862,15 +862,15 @@ int main(void)
     int rc;
 
     delay_ms(2000);
-    serial_printf("ESP32-P4 esp-hosted lwIP example\n");
+    printf("ESP32-P4 esp-hosted lwIP example\n");
     if (wifi_demo_requested())
     {
-        serial_printf("[wifi] enabled ssid=\"%s\"\n", WIFI_STA_SSID);
+        printf("[wifi] enabled ssid=\"%s\"\n", WIFI_STA_SSID);
         s_wifi_enabled = true;
     }
     else
     {
-        serial_printf("[wifi] disabled, set WIFI_STA_SSID/WIFI_STA_PASSWORD in main.c to enable lwIP\n");
+        printf("[wifi] disabled, set WIFI_STA_SSID/WIFI_STA_PASSWORD in main.c to enable lwIP\n");
     }
 
     /*
@@ -887,7 +887,7 @@ int main(void)
             sdio_cfg.clock_khz = 5000U;
             if (!sdio_try_attach(&sdio_cfg, "safe-1bit"))
             {
-                serial_printf("[sdio] attach failed\n");
+                printf("[sdio] attach failed\n");
                 while (1)
                 {
                     delay_ms(1000);
@@ -896,14 +896,14 @@ int main(void)
         }
     }
 
-    serial_printf("[sdio] attached slot=%u width=%u clk=%u kHz\n",
+    printf("[sdio] attached slot=%u width=%u clk=%u kHz\n",
                   (unsigned)sdio_cfg.slot,
                   (unsigned)sdio_cfg.bus_width,
                   (unsigned)sdio_cfg.clock_khz);
 
     if (!esp_hosted_ctrl_init())
     {
-        serial_printf("[hosted] ctrl init failed\n");
+        printf("[hosted] ctrl init failed\n");
         while (1)
         {
             delay_ms(1000);
@@ -919,7 +919,7 @@ int main(void)
     }
     if (!s_hosted_init_replied || !esp_hosted_ctrl_is_ready())
     {
-        serial_printf("[hosted] init/control timeout seen=%u replied=%u ctrl_ready=%u\n",
+        printf("[hosted] init/control timeout seen=%u replied=%u ctrl_ready=%u\n",
                       (unsigned)s_hosted_init_seen,
                       (unsigned)s_hosted_init_replied,
                       (unsigned)esp_hosted_ctrl_is_ready());
@@ -932,7 +932,7 @@ int main(void)
     rc = hosted_probe_fw_version_with_retry(&fw_major, &fw_minor, &fw_patch);
     if (rc == ESP_HOSTED_CTRL_OK)
     {
-        serial_printf("[hosted] fw version %lu.%lu.%lu\n",
+        printf("[hosted] fw version %lu.%lu.%lu\n",
                       (unsigned long)fw_major,
                       (unsigned long)fw_minor,
                       (unsigned long)fw_patch);
@@ -940,8 +940,8 @@ int main(void)
     }
     else
     {
-        serial_printf("[hosted] fw version unavailable rc=%d\n", rc);
-        serial_printf("[hosted] assuming legacy slave firmware, BT controller assumed enabled\n");
+        printf("[hosted] fw version unavailable rc=%d\n", rc);
+        printf("[hosted] assuming legacy slave firmware, BT controller assumed enabled\n");
     }
 
     if (need_bt_control)
@@ -949,24 +949,24 @@ int main(void)
         rc = hosted_bt_feature_with_retry(false);
         if (rc != ESP_HOSTED_CTRL_OK)
         {
-            serial_printf("[hosted] bt init failed rc=%d\n", rc);
+            printf("[hosted] bt init failed rc=%d\n", rc);
             while (1)
             {
                 delay_ms(1000);
             }
         }
-        serial_printf("[hosted] bt init ok\n");
+        printf("[hosted] bt init ok\n");
 
         rc = hosted_bt_feature_with_retry(true);
         if (rc != ESP_HOSTED_CTRL_OK)
         {
-            serial_printf("[hosted] bt enable failed rc=%d\n", rc);
+            printf("[hosted] bt enable failed rc=%d\n", rc);
             while (1)
             {
                 delay_ms(1000);
             }
         }
-        serial_printf("[hosted] bt enable ok\n");
+        printf("[hosted] bt enable ok\n");
     }
 
     ble_cfg.reset_cb = ble_on_host_reset;
@@ -974,7 +974,7 @@ int main(void)
     rc = ble_nimble_init(&ble_cfg);
     if (rc != ESP_OK)
     {
-        serial_printf("[ble] init failed rc=%d\n", rc);
+        printf("[ble] init failed rc=%d\n", rc);
         while (1)
         {
             delay_ms(1000);
@@ -982,21 +982,21 @@ int main(void)
     }
     if (!ble_demo_gatt_init())
     {
-        serial_printf("[ble] gatt init failed\n");
+        printf("[ble] gatt init failed\n");
         while (1)
         {
             delay_ms(1000);
         }
     }
-    serial_printf("[ble] waiting for controller sync...\n");
+    printf("[ble] waiting for controller sync...\n");
 
     if (s_wifi_enabled)
     {
         s_wifi_started = hosted_wifi_start();
         if (!s_wifi_started)
         {
-            serial_printf("[wifi] hosted Wi-Fi bring-up failed\n");
-            serial_printf("[wifi] lwIP runtime disabled\n");
+            printf("[wifi] hosted Wi-Fi bring-up failed\n");
+            printf("[wifi] lwIP runtime disabled\n");
         }
     }
 
@@ -1017,7 +1017,7 @@ int main(void)
         {
             if (!s_ble_sync_announced)
             {
-                serial_printf("[ble] synced\n");
+                printf("[ble] synced\n");
                 s_ble_sync_announced = true;
             }
 
