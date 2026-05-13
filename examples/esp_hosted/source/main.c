@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "ble_nimble.h"
 #include "delay.h"
@@ -19,7 +20,7 @@
 #include "host/ble_uuid.h"
 #include "host/util/util.h"
 #include "os/os_mbuf.h"
-#include "usb_serial.h"
+
 
 #define BLE_DEVICE_NAME "ESP32-P4 Hosted BLE"
 #define BLE_DEMO_SERVICE_UUID 0xFFF0U
