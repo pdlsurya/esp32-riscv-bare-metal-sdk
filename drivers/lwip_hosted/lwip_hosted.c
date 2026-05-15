@@ -94,7 +94,8 @@ static void lwip_hosted_rx_input(const esp_hosted_frame_info_t *info,
 
     (void)ctx;
 
-    if (!s_lwip.initialized || info == NULL || payload == NULL || len == 0U)
+    if (!s_lwip.initialized || info == NULL || payload == NULL || len == 0U ||
+        len > UINT16_MAX) /* pbuf_alloc takes u16_t; prevent silent truncation */
     {
         return;
     }
