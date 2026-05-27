@@ -2,5 +2,11 @@ target_include_directories(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_sources(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sdFat32.c)
 
 if(DEFINED SDFAT32_SD_BACKEND)
-    target_compile_definitions(esp32_rv_sdk PUBLIC SDFAT32_SD_BACKEND=${SDFAT32_SD_BACKEND})
+    set(SDFAT32_SD_BACKEND_VALUE ${SDFAT32_SD_BACKEND})
+elseif(TARGET_SOC STREQUAL "esp32p4")
+    set(SDFAT32_SD_BACKEND_VALUE 0)
+else()
+    set(SDFAT32_SD_BACKEND_VALUE 1)
 endif()
+
+target_compile_definitions(esp32_rv_sdk PUBLIC SDFAT32_SD_BACKEND=${SDFAT32_SD_BACKEND_VALUE})
