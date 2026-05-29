@@ -90,11 +90,6 @@ __attribute__((interrupt("user"), weak)) IRAM_ATTR void u_timer_interrupt_handle
  */
 __attribute__((interrupt, weak)) IRAM_ATTR void ext_interrupt_handler()
 {
-#if USE_ISR_STACK
-    /* Load sp with ISR stack pointer from mscratch and save current thread sp to mscratch. */
-    __asm__ volatile("csrrw sp,mscratch,sp");
-#endif
-
     /* Store mcause, mepc and mstatus in local variables before enabling interrupt nesting. */
     uint32_t mcause = RV_READ_CSR(mcause);
     uint32_t mepc = RV_READ_CSR(mepc);
@@ -111,11 +106,6 @@ __attribute__((interrupt, weak)) IRAM_ATTR void ext_interrupt_handler()
     RV_WRITE_CSR(mstatus, mstatus);
     RV_WRITE_CSR(mcause, mcause);
     RV_WRITE_CSR(mepc, mepc);
-
-#if USE_ISR_STACK
-    /* Load sp with thread mode stack pointer from mscratch and save current ISR sp to mscratch. */
-    __asm__ volatile("csrrw sp,mscratch,sp");
-#endif
 }
 
 /**

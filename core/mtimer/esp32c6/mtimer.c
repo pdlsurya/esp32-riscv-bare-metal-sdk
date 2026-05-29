@@ -20,11 +20,6 @@ void mtimer_callback_init(mtimer_cb_init_t *p_mtimer_cb_init)
 
 __attribute__((interrupt)) IRAM_ATTR void m_timer_interrupt_handler()
 {
-#if USE_ISR_STACK
-    /*Load sp with isr/handler mode stack pointer stored in mscratch and store current thread mode sp to mscratch*/
-    RV_SWAP_CSR(mscratch, sp); //__asm__ volatile("csrrw sp,mscratch,sp");
-#endif
-
     SET_MTIMECMP((GET_MTIME() + cb_init.period_ticks));
 
     /*Store mcause, mepc and mstatus in local variables before enabling interrupt nesting*/
@@ -39,10 +34,4 @@ __attribute__((interrupt)) IRAM_ATTR void m_timer_interrupt_handler()
     RV_WRITE_CSR(mstatus, mstatus_val);
     RV_WRITE_CSR(mcause, mcause_val);
     RV_WRITE_CSR(mepc, mepc_val);
-
-#if USE_ISR_STACK
-    /*Load sp with thread  mode stack pointer stored in mscratch and store current isr/handler mode sp to mscratch*/
-    RV_SWAP_CSR(mscratch, sp); // __asm__ volatile("csrrw sp,mscratch,sp");
-
-#endif
 }
