@@ -3,8 +3,6 @@
 #include "riscv/rv_utils.h"
 #include "soc/soc.h"
 
-#define USE_ISR_STACK 0
-
 #define MSIP_REG 0x20001800
 #define MSI_IRQn 3
 

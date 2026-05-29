@@ -9,8 +9,6 @@ enum intr_type
     INTR_TYPE_EDGE
 };
 
-#define USE_ISR_STACK 0
-
 #define MSIP_REG 0x20000000
 #define MSI_IRQn 3
 
