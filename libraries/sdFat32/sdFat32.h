@@ -33,14 +33,12 @@
  * Select SD backend:
  *  - SDFAT32_SD_BACKEND_SDMMC : SDMMC host controller
  *  - SDFAT32_SD_BACKEND_SPI   : SD card over SPI
- *  - SDFAT32_SD_BACKEND_USB_MSC : USB flash drive via USB MSC host
  */
 #define SDFAT32_SD_BACKEND_SDMMC 0
 #define SDFAT32_SD_BACKEND_SPI 1
-#define SDFAT32_SD_BACKEND_USB_MSC 2
 
 #ifndef SDFAT32_SD_BACKEND
-#define SDFAT32_SD_BACKEND SDFAT32_SD_BACKEND_SPI
+#define SDFAT32_SD_BACKEND SDFAT32_SD_BACKEND_SDMMC
 #endif
 
 #ifdef __cplusplus
