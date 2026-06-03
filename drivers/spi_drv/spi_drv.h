@@ -31,6 +31,9 @@ typedef struct
     uint8_t cs_pin;
     int8_t id;
     uint8_t mode;
+    /* Optional blocking DMA path used by spi_transceive when enabled. */
+    uint8_t dma_channel;
+    bool dma_enabled;
 } spi_dev_handle_t;
 
 void spi_device_config(spi_dev_handle_t *dev);
