@@ -7,6 +7,7 @@
 #include "delay.h"
 #include "spi_drv.h"
 #include "soc/gdma_channel.h"
+#include "soc/spi_periph.h"
 #include "soc/soc_caps.h"
 
 #if defined(TARGET_SOC_ESP32P4)
@@ -104,53 +105,59 @@ typedef gdma_dev_t spi_gdma_dev_t;
 #define SPI_DMA_RX_STOP(dma, ch) gdma_ll_rx_stop((dma), (ch))
 #endif
 
+static bool driver_configured[SPI_HOST_MAX] = {false};
+
+static int spi_get_host_id(spi_dev_t *port)
+{
+    if (port == &GPSPI2)
+    {
+        return SPI2_HOST;
+    }
 #if defined(TARGET_SOC_ESP32P4)
-
-#define SPI3_MOSI_GPIO_SIG 49 ///< GPIO matrix signal number of MOSI pin
-#define SPI3_MISO_GPIO_SIG 48 ///< GPIO matrix signal number of MISO pin
-#define SPI3_SCK_GPIO_SIG 47  ///< GPIO matrix signal number of SCK pin
-#define SPI3_CS0_SIG 52       ///< GPIO matrix signal number of CS0 pin
-#define SPI3_CS1_SIG 46       ///< GPIO matrix signal number of CS1 pin
-#define SPI3_CS2_SIG 45       ///< GPIO matrix signal number of CS2 pin
-
-#define SPI2_MOSI_GPIO_SIG 55 ///< GPIO matrix signal number of MOSI pin
-#define SPI2_MISO_GPIO_SIG 54 ///< GPIO matrix signal number of MISO pin
-#define SPI2_SCK_GPIO_SIG 53  ///< GPIO matrix signal number of SCK pin
-#define SPI2_CS0_SIG 62       ///< GPIO matrix signal number of CS0 pin
-#define SPI2_CS1_SIG 63       ///< GPIO matrix signal number of CS1 pin
-#define SPI2_CS2_SIG 64       ///< GPIO matrix signal number of CS2 pin
-#define SPI2_CS3_SIG 65       ///< GPIO matrix signal number of CS3 pin
-#define SPI2_CS4_SIG 66       ///< GPIO matrix signal number of CS4 pin
-#define SPI2_CS5_SIG 67       ///< GPIO matrix signal number of CS5 pin
-
-#elif defined(TARGET_SOC_ESP32C6)
-
-#define SPI2_MOSI_GPIO_SIG 65 ///< GPIO matrix signal number of MOSI pin
-#define SPI2_MISO_GPIO_SIG 64 ///< GPIO matrix signal number of MISO pin
-#define SPI2_SCK_GPIO_SIG 63  ///< GPIO matrix signal number of SCK pin
-#define SPI2_CS0_SIG 68       ///< GPIO matrix signal number of CS0 pin
-#define SPI2_CS1_SIG 101      ///< GPIO matrix signal number of CS1 pin
-#define SPI2_CS2_SIG 102      ///< GPIO matrix signal number of CS2 pin
-#define SPI2_CS3_SIG 103      ///< GPIO matrix signal number of CS3 pin
-#define SPI2_CS4_SIG 104      ///< GPIO matrix signal number of CS4 pin
-#define SPI2_CS5_SIG 105      ///< GPIO matrix signal number of CS5 pin
-
-#define SPI3_MOSI_GPIO_SIG 22 ///< GPIO matrix signal number of MOSI pin
-#define SPI3_MISO_GPIO_SIG 22 ///< GPIO matrix signal number of MISO pin
-#define SPI3_SCK_GPIO_SIG 22  ///< GPIO matrix signal number of SCK pin
-#define SPI3_CS0_SIG 22       ///< GPIO matrix signal number of CS0 pin
-#define SPI3_CS1_SIG 22       ///< GPIO matrix signal number of CS1 pin
-#define SPI3_CS2_SIG 22       ///< GPIO matrix signal number of CS2 pin
-
+    if (port == &GPSPI3)
+    {
+        return SPI3_HOST;
+    }
 #endif
+    return -1;
+}
 
-static bool driver_configured[2] = {false, false};
+static const spi_signal_conn_t *spi_get_signal_conn(spi_dev_t *port)
+{
+    int host_id = spi_get_host_id(port);
+    if (host_id < 0 || host_id >= SOC_SPI_PERIPH_NUM)
+    {
+        return NULL;
+    }
 
-static uint8_t cs_signals[2][6] = {
-    {SPI2_CS0_SIG, SPI2_CS1_SIG, SPI2_CS2_SIG, SPI2_CS3_SIG, SPI2_CS4_SIG, SPI2_CS5_SIG},
-    {SPI3_CS0_SIG, SPI3_CS1_SIG, SPI3_CS2_SIG},
+    return &spi_periph_signal[host_id];
+}
 
-};
+static void spi_gpio_output_config(uint8_t gpio_num, uint32_t signal_idx)
+{
+    if (gpio_num == SPI_PIN_UNUSED)
+    {
+        return;
+    }
+
+    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[gpio_num], PIN_FUNC_GPIO);
+    GPIO.func_out_sel_cfg[gpio_num].out_sel = signal_idx;
+    gpio_ll_output_enable(&GPIO, gpio_num);
+    gpio_ll_input_disable(&GPIO, gpio_num);
+}
+
+static void spi_gpio_input_config(uint8_t gpio_num, uint32_t signal_idx)
+{
+    if (gpio_num == SPI_PIN_UNUSED)
+    {
+        return;
+    }
+
+    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[gpio_num], PIN_FUNC_GPIO);
+    gpio_ll_input_enable(&GPIO, gpio_num);
+    GPIO.func_in_sel_cfg[signal_idx].sig_in_sel = 1;
+    GPIO.func_in_sel_cfg[signal_idx].in_sel = gpio_num;
+}
 
 #if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C6)
 static spi_dma_desc_t s_spi_dma_tx_desc[2][SOC_GDMA_PAIRS_PER_GROUP_MAX] __attribute__((aligned(SPI_DMA_DESC_ALIGN)));
@@ -160,17 +167,13 @@ static uint8_t s_spi_dma_rx_buf[2][SOC_GDMA_PAIRS_PER_GROUP_MAX][SPI_DMA_MAX_CHU
 
 static int spi_get_port_index(spi_dev_t *port)
 {
-    if (port == &GPSPI2)
+    int host_id = spi_get_host_id(port);
+    if (host_id < SPI2_HOST)
     {
-        return 0;
+        return -1;
     }
-#if defined(TARGET_SOC_ESP32P4)
-    if (port == &GPSPI3)
-    {
-        return 1;
-    }
-#endif
-    return -1;
+
+    return host_id - SPI2_HOST;
 }
 
 static int spi_get_dma_periph_id(spi_dev_t *port)
@@ -439,47 +442,48 @@ static void spi_dma_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *
 
 static void spi_gpio_config(spi_config_t *config)
 {
-
-    // Configure mosi pin
-    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[config->pins.mosi], PIN_FUNC_GPIO); // Set as GPIO
-    GPIO.func_out_sel_cfg[config->pins.mosi].out_sel = config->port == &GPSPI2 ? SPI2_MOSI_GPIO_SIG : SPI3_MOSI_GPIO_SIG;
-    gpio_ll_output_enable(&GPIO, config->pins.mosi);
-    gpio_ll_input_disable(&GPIO, config->pins.mosi);
-
-    // Configure miso pin
-    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[config->pins.miso], PIN_FUNC_GPIO); // Set as GPIO
-    gpio_ll_input_enable(&GPIO, config->pins.miso);
-    GPIO.func_in_sel_cfg[config->port == &GPSPI2 ? SPI2_MISO_GPIO_SIG : SPI3_MISO_GPIO_SIG].sig_in_sel = 1;
-    GPIO.func_in_sel_cfg[config->port == &GPSPI2 ? SPI2_MISO_GPIO_SIG : SPI3_MISO_GPIO_SIG].in_sel = config->pins.miso;
-
-    // Configure sck pin
-    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[config->pins.sck], PIN_FUNC_GPIO); // Set as GPIO
-    GPIO.func_out_sel_cfg[config->pins.sck].out_sel = config->port == &GPSPI2 ? SPI2_SCK_GPIO_SIG : SPI3_SCK_GPIO_SIG;
-    gpio_ll_output_enable(&GPIO, config->pins.sck);
-    gpio_ll_input_disable(&GPIO, config->pins.sck);
-}
-
-void spi_device_config(spi_dev_handle_t *dev)
-{
-    spi_ll_master_cal_clock(APB_CLK_FREQ, dev->speed_hz, SPI_CLK_DUTY_50, &dev->clk_reg_val);
-
-    if (dev->cs_pin == SPI_CS_UNUSED)
+    const spi_signal_conn_t *signals = spi_get_signal_conn(config->port);
+    if (signals == NULL)
     {
         return;
     }
 
-    uint8_t spi_port_num = dev->port == &GPSPI2 ? 2 : 3;
+    spi_gpio_output_config(config->pins.mosi, signals->spid_out);
+    spi_gpio_input_config(config->pins.miso, signals->spiq_in);
+    spi_gpio_output_config(config->pins.sck, signals->spiclk_out);
+}
+
+void spi_device_config(spi_dev_handle_t *dev)
+{
+    const spi_signal_conn_t *signals = spi_get_signal_conn(dev->port);
+
+    spi_ll_master_cal_clock(APB_CLK_FREQ, dev->speed_hz, SPI_CLK_DUTY_50, &dev->clk_reg_val);
+
+    if (dev->cs_pin == SPI_CS_UNUSED || signals == NULL)
+    {
+        return;
+    }
+
+    if (dev->id < 0 || dev->id >= SOC_SPI_MAX_CS_NUM)
+    {
+        return;
+    }
 
     gpio_ll_func_sel(&GPIO, dev->cs_pin, PIN_FUNC_GPIO);
-    GPIO.func_out_sel_cfg[dev->cs_pin].out_sel = cs_signals[spi_port_num - 2][dev->id];
+    GPIO.func_out_sel_cfg[dev->cs_pin].out_sel = signals->spics_out[dev->id];
     gpio_ll_output_enable(&GPIO, dev->cs_pin);
     gpio_ll_input_disable(&GPIO, dev->cs_pin);
 }
 
 void spi_init(spi_config_t *config)
 {
-    uint8_t spi_port_num = config->port == &GPSPI2 ? 2 : 3;
-    if (driver_configured[spi_port_num - 2])
+    int host_id = spi_get_host_id(config->port);
+    if (host_id < 0)
+    {
+        return;
+    }
+
+    if (driver_configured[host_id])
     {
         return;
     }
@@ -495,11 +499,16 @@ void spi_init(spi_config_t *config)
 
     spi_ll_apply_config(config->port);
 
-    driver_configured[spi_port_num - 2] = true;
+    driver_configured[host_id] = true;
 }
 
 void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uint32_t len, bool hold_cs_low)
 {
+    if (dev == NULL || dev->port == NULL || len == 0U)
+    {
+        return;
+    }
+
 #if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C6)
     if (spi_dma_is_usable(dev, len))
     {
@@ -508,17 +517,18 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
     }
 #endif
 
-    uint32_t txn_count = (len + 63) / 64;
+    uint32_t txn_count = (len + 63U) / 64U;
 
-    for (int txn_idx = 0; txn_idx < txn_count; txn_idx++)
+    for (uint32_t txn_idx = 0; txn_idx < txn_count; txn_idx++)
     {
-        uint8_t tx_len = len >= 64 ? 64 : len;
-        uint8_t words = (tx_len + 3) / 4;
+        uint32_t offset = txn_idx * 64U;
+        uint8_t tx_len = (uint8_t)((len - offset) >= 64U ? 64U : (len - offset));
+        uint8_t words = (uint8_t)((tx_len + 3U) / 4U);
 
-        spi_ll_set_mosi_bitlen(dev->port, tx_len * 8);
-        spi_ll_set_miso_bitlen(dev->port, tx_len * 8);
+        spi_ll_set_mosi_bitlen(dev->port, tx_len * 8U);
+        spi_ll_set_miso_bitlen(dev->port, tx_len * 8U);
         spi_ll_enable_mosi(dev->port, 1);
-        spi_ll_enable_miso(dev->port, 1);
+        spi_ll_enable_miso(dev->port, rx_buf != NULL);
         spi_ll_master_set_mode(dev->port, dev->mode);
         spi_ll_master_set_clock_by_reg(dev->port, &dev->clk_reg_val);
         const bool keep_cs = hold_cs_low || (txn_idx + 1 < txn_count);
@@ -526,11 +536,22 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
         spi_ll_master_select_cs(dev->port, dev->id);
         spi_ll_apply_config(dev->port);
 
-        for (int i = 0; i < words; i++)
+        for (uint8_t i = 0; i < words; i++)
         {
-
-            dev->port->data_buf[i].buf = ((uint32_t *)tx_buf)[i + (txn_idx * 16)];
+            uint32_t word = 0xFFFFFFFFU;
+            uint32_t chunk_offset = (uint32_t)i * 4U;
+            uint32_t copy_len = (tx_len > chunk_offset) ? (tx_len - chunk_offset) : 0U;
+            if (copy_len > 4U)
+            {
+                copy_len = 4U;
+            }
+            if (tx_buf != NULL && copy_len > 0U)
+            {
+                memcpy(&word, &tx_buf[offset + chunk_offset], copy_len);
+            }
+            dev->port->data_buf[i].buf = word;
         }
+
         // Start SPI transfer
         spi_ll_user_start(dev->port);
 
@@ -539,14 +560,21 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
             ;
         if (rx_buf != NULL)
         {
-            for (int i = 0; i < words; i++)
+            for (uint8_t i = 0; i < words; i++)
             {
-
-                ((uint32_t *)rx_buf)[i + (txn_idx * 16)] = dev->port->data_buf[i].buf;
+                uint32_t chunk_offset = (uint32_t)i * 4U;
+                uint32_t copy_len = (tx_len > chunk_offset) ? (tx_len - chunk_offset) : 0U;
+                if (copy_len > 4U)
+                {
+                    copy_len = 4U;
+                }
+                if (copy_len > 0U)
+                {
+                    uint32_t word = dev->port->data_buf[i].buf;
+                    memcpy(&rx_buf[offset + chunk_offset], &word, copy_len);
+                }
             }
         }
-
-        len -= 64;
     }
 }
 

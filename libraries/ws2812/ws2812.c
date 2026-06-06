@@ -2,14 +2,13 @@
 #include <string.h>
 #include "hal/gpio_ll.h"
 #include "hal/rmt_ll.h"
+#include "soc/rmt_periph.h"
 #include "spi_drv.h"
 #include "ws2812.h"
 
 #if defined(TARGET_SOC_ESP32P4)
-#define RMT_SIG 246
 #define WS2812_PIN 23
 #elif defined(TARGET_SOC_ESP32C6)
-#define RMT_SIG 71
 #define WS2812_PIN 8
 #endif
 
@@ -28,9 +27,11 @@ static spi_dev_handle_t spi_dev;
 
 static void rmt_gpio_config()
 {
+    int signal_idx = rmt_periph_signals.groups[0].channels[0].tx_sig;
+
     gpio_ll_output_enable(&GPIO, WS2812_PIN);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[WS2812_PIN], PIN_FUNC_GPIO); // Set as GPIO
-    GPIO.func_out_sel_cfg[WS2812_PIN].out_sel = RMT_SIG;
+    GPIO.func_out_sel_cfg[WS2812_PIN].out_sel = signal_idx;
     GPIO.func_out_sel_cfg[WS2812_PIN].oen_sel = 1;
 }
 
@@ -114,13 +115,13 @@ void ws2812_init()
 {
 #if WS2812_USE_SPI
     // Configure SPI pins
-    spi_pins_t spi_pins = {.mosi = WS2812_PIN, .miso = 9, .sck = 14};
+    spi_pins_t spi_pins = {.mosi = WS2812_PIN, .miso = SPI_PIN_UNUSED, .sck = SPI_PIN_UNUSED};
     spi_config_t spi_config = {.port = SPI_GET_HW(2), .pins = spi_pins};
     spi_init(&spi_config);
 
     // Set SPI device parameters
     spi_dev.speed_hz = 2000000; // Set SPI clock speed
-    spi_dev.cs_pin = 5;         // Chip select pin
+    spi_dev.cs_pin = SPI_CS_UNUSED;
     spi_dev.id = 0;             // Device ID
     spi_dev.mode = 0;           // SPI mode
     spi_dev.port = spi_config.port;
