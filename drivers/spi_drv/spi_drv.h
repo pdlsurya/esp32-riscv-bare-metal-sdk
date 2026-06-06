@@ -8,6 +8,7 @@
 #define SPI_GET_HW(num) SPI_CONCAT(&GPSPI, num)
 
 #define SPI_GET_DEV_HANDLE(num) {.port = SPI_GET_HW(num)}
+#define SPI_PIN_UNUSED 0xFFU
 #define SPI_CS_UNUSED 0xFFU
 
 typedef struct

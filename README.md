@@ -27,6 +27,7 @@ Currently supported SoCs:
 - GPIO driver: pin direction, read/write, pull-up and pull-down configuration
 - I2C driver: master-mode transactions for peripheral bring-up
 - SPI driver: low-level SPI transfer support
+- UART driver: polling-based high-power UART TX/RX with configurable pin routing
 - I2S driver: TX path with DMA streaming support for continuous PCM playback
 - ES8311 codec driver: register-level codec initialization and playback control
 - SD/MMC and SD SPI drivers: card access paths for block reads/writes
