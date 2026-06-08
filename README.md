@@ -16,7 +16,7 @@ Currently supported SoCs:
 - Uses direct boot mode(No second stage bootloader required)
 - Direct register-level programming
 - Custom linker scripts and startup code
-- Example applications (e.g., esp_hosted, blink_ws2812)
+- Example applications (e.g., uart_echo, blink_ws2812, esp_hosted)
 - Compatible with CMake and Ninja build systems
 
 ---
@@ -42,6 +42,7 @@ Currently supported SoCs:
 ### Target-Specific Notes
 
 - `esp_hosted` BLE + Wi-Fi/lwIP integration is supported on `ESP32-P4` target only.
+- `uart_echo` defaults to `GPIO20/GPIO19` on `ESP32-C6` and `GPIO10/GPIO11` on `ESP32-P4`.
 - Generic peripheral drivers/libraries are available across supported SoCs where hardware capability matches.
 
 ---
@@ -86,7 +87,10 @@ git submodule update --init --recursive
 ### Build SDK examples on the host
 
 ```bash
-cd examples/blink_ws2812
+cd examples/uart_echo
+./build.sh
+
+cd ../blink_ws2812
 ./build.sh
 
 cd ../esp_hosted
@@ -96,11 +100,11 @@ cd ../esp_hosted
 ### Flash an SDK example
 
 ```bash
-cd examples/blink_ws2812
+cd examples/uart_echo
 ./flash.sh
 ```
 
-If you want the previous one-command flow, use `./build_flash.sh` in either example directory.
+If you want the previous one-command flow, use `./build_flash.sh` in any example directory.
 
 ### Build SDK examples with Docker
 
@@ -109,6 +113,7 @@ Container builds are optional. The regular host build flow still works, and Dock
 ```bash
 docker build -t esp32-rv-sdk -f docker/Dockerfile .
 
+./scripts/docker-build.sh examples/uart_echo
 ./scripts/docker-build.sh examples/blink_ws2812
 ./scripts/docker-build.sh examples/esp_hosted
 ```
