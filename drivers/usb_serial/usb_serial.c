@@ -7,7 +7,7 @@
 #include "hal/usb_serial_jtag_ll.h"
 #include "usb_serial.h"
 
-static int serial_write_bytes(const char *buf, size_t len)
+static int usb_serial_write_bytes(const char *buf, size_t len)
 {
     size_t offset = 0;
 
@@ -50,9 +50,9 @@ static int serial_write_bytes(const char *buf, size_t len)
     return (int)len;
 }
 
-int serial_write(const char *buf, size_t len)
+int usb_serial_write(const char *buf, size_t len)
 {
-    return serial_write_bytes(buf, len);
+    return usb_serial_write_bytes(buf, len);
 }
 
 /**
@@ -60,7 +60,7 @@ int serial_write(const char *buf, size_t len)
  *
  * @return rx string
  */
-char *serial_read_string()
+char *usb_serial_read_string()
 {
     int idx = 0;
     static char string_buf[256];
