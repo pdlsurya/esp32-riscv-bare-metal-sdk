@@ -32,7 +32,7 @@ int console_write(const char *buf, size_t len)
         return -1;
     }
 
-    return serial_write(buf, len);
+    return usb_serial_write(buf, len);
 }
 
 int console_printf(const char *fmt, ...)

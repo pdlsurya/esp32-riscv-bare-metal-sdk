@@ -14,7 +14,7 @@ int _write(int fd, const void *ptr, size_t len)
         return -1;
     }
 
-    return serial_write((const char *)ptr, len);
+    return usb_serial_write((const char *)ptr, len);
 }
 
 int _read(int fd, void *ptr, size_t len)
@@ -32,7 +32,7 @@ int _read(int fd, void *ptr, size_t len)
         return 0;
     }
 
-    rx_buf = serial_read_string();
+    rx_buf = usb_serial_read_string();
     read_len = strlen(rx_buf);
     if (read_len > len)
     {
