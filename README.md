@@ -45,6 +45,8 @@ Currently supported SoCs:
 - `uart_echo` defaults to `GPIO20/GPIO19` on `ESP32-C6` and `GPIO10/GPIO11` on `ESP32-P4`.
 - Generic peripheral drivers/libraries are available across supported SoCs where hardware capability matches.
 
+- Currently, only ESP32‑P4 chip revision v1.x is supported by this SDK.
+
 ---
 
 ## Supported Targets
@@ -67,7 +69,7 @@ Targets are selected during **CMake configuration**.
 
 ## Note
 
-Some low-level components (including portions of HAL headers, register definitions, and peripheral structure declarations) are adapted from Espressif's ESP-IDF SDK. These were used as reference to avoid reverse engineering hardware register layouts and peripheral interfaces, while keeping this project independent of the ESP-IDF framework.
+Some low-level components (including portions of HAL headers, register definitions, and peripheral structure declarations) are adapted from Espressif's ESP-IDF SDK. These were used as reference to[...]
 
 ## Getting Started
 
@@ -130,7 +132,7 @@ Notes:
 - `./scripts/docker-build.sh` reuses the existing Docker image by default. Set `REBUILD_IMAGE=1` when you want to rebuild it after changing the Dockerfile or container dependencies.
 - `./scripts/docker-build.sh ...` binds the SDK source tree from the host and builds directly into the requested example `build/` directory.
 - Flashing from the host is usually the simplest path, especially on macOS where USB passthrough into Docker can be unreliable.
-- The Docker image currently defaults to the Espressif `riscv32-esp-elf` `esp-14.2.0_20251107` Linux toolchain and can be overridden with Docker build arguments if you want to pin a different release.
+- The Docker image currently defaults to the Espressif `riscv32-esp-elf` `esp-14.2.0_20251107` Linux toolchain and can be overridden with Docker build arguments if you want to pin a different rel[...]
 
 ## Building External Projects
 
@@ -174,7 +176,7 @@ Build an external project with Docker:
 ```bash
 docker run --rm -it \
   -v /absolute/path/to/my-project:/work/app \
-  -v /absolute/path/to/esp32-rv-bare-metal-sdk:/work/sdk \
+  -v /absolute/path/to/esp32-riscv-bare-metal-sdk:/work/sdk \
   -w /work/app \
   esp32-rv-sdk \
   bash -lc 'cmake -S . -B build-docker -GNinja -DSDK_PATH=/work/sdk && cmake --build build-docker'
@@ -182,14 +184,4 @@ docker run --rm -it \
 
 Use a separate Docker build directory such as `build-docker/` so container builds do not reuse a host-generated `build/` cache with absolute host paths.
 
-If your project depends on other local components such as an RTOS or board library, mount them as additional volumes and pass matching `-D..._PATH=/work/...` arguments during CMake configure. For example:
-
-```bash
-docker run --rm -it \
-  -v /absolute/path/to/my-project:/work/app \
-  -v /absolute/path/to/esp32-rv-bare-metal-sdk:/work/sdk \
-  -v /absolute/path/to/sanoRTOS:/work/sanoRTOS \
-  -w /work/app \
-  esp32-rv-sdk \
-  bash -lc 'cmake -S . -B build-docker -GNinja -DSDK_PATH=/work/sdk -DSANORTOS_PATH=/work/sanoRTOS && cmake --build build-docker'
-```
+If your project depends on other local components such as an RTOS or board library, mount them as additional volumes and pass matching `-D..._PATH=/work/...` arguments during CMake configure. For[...]
