@@ -26,6 +26,14 @@ __attribute__((section(".flash_header"), used)) const uint32_t flash_header[2] =
 
 extern int main(void); // User's main function
 
+static inline void cpu_init(void)
+{
+    rv_utils_set_mtvec((uint32_t)&vector_table); // Set the mtvec register with the address of the vector table
+
+    /*Set CPU clock source to PLL*/
+    clk_ll_cpu_set_src(SOC_CPU_CLK_SRC_PLL);
+}
+
 /**
  * @brief Disable Watchdog Timers
  *
@@ -59,10 +67,9 @@ static void watchdog_disable()
 __attribute__((noreturn, used)) static void reset_handler(void)
 {
 
-    watchdog_disable();
+    cpu_init();
 
-    /*Set CPU clock source to PLL*/
-    clk_ll_cpu_set_src(SOC_CPU_CLK_SRC_PLL);
+    watchdog_disable();
 
     uint32_t *src = &__text_end;
     uint32_t *dest = &__data_start;
@@ -93,13 +100,11 @@ __attribute__((noreturn, used)) static void reset_handler(void)
 }
 
 /**
- * @brief Entry Point: Setup vector table, stack pointer and call reset handler
+ * @brief Entry Point: Setup stack pointer and call reset handler
  *
  */
 __attribute__((section(".entry"), naked, noreturn, used)) void _start(void)
 {
-    rv_utils_set_mtvec((uint32_t)&vector_table); // Set the mtvec register with the address of the vector table
-
     __asm__ volatile(
         "la sp, __stack_top\n" // Load the stack pointer
         "j reset_handler\n");  // Jump to the reset handler
