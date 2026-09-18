@@ -3,10 +3,10 @@ cmake_minimum_required(VERSION 3.13)
 # Project name 
 project(esp32_rv_bare_metal_sdk LANGUAGES C CXX ASM)
 
-# Define esp32p4 sdk as static library
+# Define the SDK as a static library
 add_library(esp32_rv_sdk STATIC ${CMAKE_CURRENT_SOURCE_DIR}/core/startup/${TARGET_SOC}/startup.c)
 
-target_include_directories(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sdk-config ${CMAKE_CURRENT_SOURCE_DIR}/core/startup/${TARGET_SOC})
+target_include_directories(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/core/startup/${TARGET_SOC})
 
 string(TOUPPER ${TARGET_SOC} TARGET_SOC_UPPER)
 
