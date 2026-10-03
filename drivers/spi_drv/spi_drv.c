@@ -14,8 +14,14 @@
 #include "hal/gdma_ll.h"
 #include "hal/axi_dma_ll.h"
 #include "hal/cache_ll.h"
-#elif defined(TARGET_SOC_ESP32C6)
+#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
 #include "hal/gdma_ll.h"
+#endif
+
+#if defined(TARGET_SOC_ESP32C3)
+#define SPI_DATA_BUF(port, index) ((port)->data_buf[index])
+#else
+#define SPI_DATA_BUF(port, index) ((port)->data_buf[index].buf)
 #endif
 
 #define SPI_CLK_DUTY_50 128
@@ -67,7 +73,7 @@ typedef axi_dma_dev_t spi_gdma_dev_t;
 #define SPI_DMA_RX_SET_DESC(dma, ch, addr) axi_dma_ll_rx_set_desc_addr((dma), (ch), (addr))
 #define SPI_DMA_RX_START(dma, ch) axi_dma_ll_rx_start((dma), (ch))
 #define SPI_DMA_RX_STOP(dma, ch) axi_dma_ll_rx_stop((dma), (ch))
-#elif defined(TARGET_SOC_ESP32C6)
+#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
 #define SPI_DMA_DESC_ALIGN 4U
 #define SPI_DMA_BUF_ALIGN 4U
 #define SPI_DMA_MAX_CHUNK DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED
@@ -159,7 +165,7 @@ static void spi_gpio_input_config(uint8_t gpio_num, uint32_t signal_idx)
     GPIO.func_in_sel_cfg[signal_idx].in_sel = gpio_num;
 }
 
-#if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C6)
+#if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
 static spi_dma_desc_t s_spi_dma_tx_desc[2][SOC_GDMA_PAIRS_PER_GROUP_MAX] __attribute__((aligned(SPI_DMA_DESC_ALIGN)));
 static spi_dma_desc_t s_spi_dma_rx_desc[2][SOC_GDMA_PAIRS_PER_GROUP_MAX] __attribute__((aligned(SPI_DMA_DESC_ALIGN)));
 static uint8_t s_spi_dma_tx_buf[2][SOC_GDMA_PAIRS_PER_GROUP_MAX][SPI_DMA_MAX_CHUNK] __attribute__((aligned(SPI_DMA_BUF_ALIGN)));
@@ -350,6 +356,10 @@ static void spi_dma_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *
     spi_ll_enable_mosi(dev->port, true);
     spi_ll_enable_miso(dev->port, need_rx);
     SPI_DMA_TX_START(dma, ch);
+#if defined(TARGET_SOC_ESP32C3)
+    /* C3 has no DMA TX FIFO empty status bit; DMA may start immediately. */
+    bool tx_fifo_ready = true;
+#else
     bool tx_fifo_ready = false;
     for (uint32_t budget = SPI_DMA_TIMEOUT_US; budget > 0U; budget--)
     {
@@ -360,6 +370,7 @@ static void spi_dma_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *
         }
         delay_us(1);
     }
+#endif
     if (!tx_fifo_ready)
     {
         dma_error = true;
@@ -509,7 +520,7 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
         return;
     }
 
-#if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C6)
+#if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
     if (spi_dma_is_usable(dev, len))
     {
         spi_dma_transceive(dev, tx_buf, rx_buf, len, hold_cs_low);
@@ -549,7 +560,7 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
             {
                 memcpy(&word, &tx_buf[offset + chunk_offset], copy_len);
             }
-            dev->port->data_buf[i].buf = word;
+            SPI_DATA_BUF(dev->port, i) = word;
         }
 
         // Start SPI transfer
@@ -570,7 +581,7 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
                 }
                 if (copy_len > 0U)
                 {
-                    uint32_t word = dev->port->data_buf[i].buf;
+                    uint32_t word = SPI_DATA_BUF(dev->port, i);
                     memcpy(&rx_buf[offset + chunk_offset], &word, copy_len);
                 }
             }
@@ -598,7 +609,7 @@ uint8_t spi_transfer_byte(spi_dev_handle_t *dev, uint8_t tx_byte, bool hold_cs_l
     spi_ll_master_select_cs(dev->port, dev->id);
     spi_ll_apply_config(dev->port);
 
-    dev->port->data_buf[0].buf = tx_byte;
+    SPI_DATA_BUF(dev->port, 0) = tx_byte;
 
     // Start SPI transfer
     spi_ll_user_start(dev->port);
@@ -607,7 +618,7 @@ uint8_t spi_transfer_byte(spi_dev_handle_t *dev, uint8_t tx_byte, bool hold_cs_l
     while (spi_ll_get_running_cmd(dev->port))
         ;
 
-    return dev->port->data_buf[0].buf;
+    return SPI_DATA_BUF(dev->port, 0);
 }
 
 void spi_send_dummy_clocks(spi_dev_handle_t *dev, uint32_t cycles, bool cs_low, bool hold_cs_low)

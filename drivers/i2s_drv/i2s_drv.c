@@ -53,6 +53,18 @@
 
 #endif
 
+#if defined(TARGET_SOC_ESP32C3)
+/* Use non-atomic raw LL entry points in this bare-metal SDK. */
+#undef i2s_ll_enable_bus_clock
+#undef i2s_ll_reset_register
+#undef i2s_ll_enable_core_clock
+#define I2S_TX_DONE_CLEAR(port) ((port)->int_clr.tx_done = 1)
+#define I2S_TX_DONE_RAW(port) ((port)->int_raw.tx_done)
+#else
+#define I2S_TX_DONE_CLEAR(port) ((port)->int_clr.tx_done_int_clr = 1)
+#define I2S_TX_DONE_RAW(port) ((port)->int_raw.tx_done_int_raw)
+#endif
+
 #ifndef I2S_DEFAULT_MCLK_MULTIPLE
 #define I2S_DEFAULT_MCLK_MULTIPLE 256U
 #endif
@@ -632,8 +644,10 @@ static uint32_t i2s_get_source_clock_hz(i2s_clock_src_t src)
     {
     case I2S_CLK_SRC_XTAL:
         return 40000000U;
+#if !defined(TARGET_SOC_ESP32C3)
     case I2S_CLK_SRC_PLL_240M:
         return 240000000U;
+#endif
     case I2S_CLK_SRC_PLL_160M:
         return 160000000U;
     default:
@@ -835,7 +849,7 @@ static bool i2s_dma_write_chunk(i2s_dev_handle_t *dev, const uint8_t *data, size
 
     i2s_ll_tx_stop(dev->port);
     i2s_ll_tx_reset_fifo(dev->port);
-    dev->port->int_clr.tx_done_int_clr = 1;
+    I2S_TX_DONE_CLEAR(dev->port);
 
     I2S_DMA_TX_SET_DESC(dma, dev->dma_channel, (uint32_t)(uintptr_t)dma_desc);
     I2S_DMA_TX_START(dma, dev->dma_channel);
@@ -881,14 +895,14 @@ static bool i2s_dma_write_chunk(i2s_dev_handle_t *dev, const uint8_t *data, size
     budget = timeout_us == 0U ? I2S_DEFAULT_TIMEOUT_US : timeout_us;
     while (budget-- > 0U)
     {
-        if (dev->port->int_raw.tx_done_int_raw)
+        if (I2S_TX_DONE_RAW(dev->port))
         {
             break;
         }
         delay_us(1);
     }
 
-    dev->port->int_clr.tx_done_int_clr = 1;
+    I2S_TX_DONE_CLEAR(dev->port);
     i2s_ll_tx_stop(dev->port);
     I2S_DMA_TX_STOP(dma, dev->dma_channel);
 
@@ -956,7 +970,7 @@ static bool i2s_stream_start_dma_internal(i2s_dev_handle_t *dev, bool reset_tx_f
         i2s_ll_tx_stop(dev->port);
         i2s_ll_tx_reset_fifo(dev->port);
     }
-    dev->port->int_clr.tx_done_int_clr = 1;
+    I2S_TX_DONE_CLEAR(dev->port);
 
     I2S_DMA_TX_START(dma, dev->dma_channel);
     i2s_ll_tx_start(dev->port);

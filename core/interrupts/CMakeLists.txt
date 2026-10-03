@@ -6,7 +6,11 @@ target_sources(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}/int
 
 target_include_directories(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC})
 
-if(TARGET_SOC STREQUAL "esp32c6")
+if(TARGET_SOC STREQUAL "esp32c3")
+
+    target_sources(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}/interrupt_intc.c)
+
+elseif(TARGET_SOC STREQUAL "esp32c6")
 
     target_sources(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}/interrupt_plic.c)
 

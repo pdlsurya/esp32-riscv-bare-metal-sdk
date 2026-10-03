@@ -7,6 +7,11 @@
 #include "usb_serial.h"
 #include "delay.h"
 
+#if defined(TARGET_SOC_ESP32C3)
+/* Use the raw LL clock entry point in this bare-metal SDK. */
+#undef i2c_ll_enable_bus_clock
+#endif
+
 #define I2C_WRITE_BIT (0x0)
 #define I2C_READ_BIT (0x1)
 #define I2C_TRANSACTION_TIMEOUT_US (1000000U)
@@ -165,7 +170,11 @@ bool i2c_write(i2c_dev_handle_t *dev, uint8_t *data, uint8_t len)
         cmd_write.ack_en = 1;
         cmd_write.ack_val = 0;
         cmd_write.done = 0;
+#if defined(TARGET_SOC_ESP32C3)
+        cmd_write.byte_num = dev->port->sr.tx_fifo_cnt;
+#else
         cmd_write.byte_num = dev->port->sr.txfifo_cnt;
+#endif
         i2c_ll_master_write_cmd_reg(dev->port, cmd_write, write_cmd_idx);
 
         // Update remaining bytes

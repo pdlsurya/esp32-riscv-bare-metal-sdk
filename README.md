@@ -5,6 +5,7 @@ This SDK provides low-level access to ESP32 hardware, enabling firmware developm
 
 Currently supported SoCs:
 
+- **ESP32-C3**
 - **ESP32-C6**
 - **ESP32-P4**
 
@@ -42,7 +43,10 @@ Currently supported SoCs:
 ### Target-Specific Notes
 
 - `esp_hosted` BLE + Wi-Fi/lwIP integration is supported on `ESP32-P4` target only.
-- `uart_echo` defaults to `GPIO20/GPIO19` on `ESP32-C6` and `GPIO10/GPIO11` on `ESP32-P4`.
+- `uart_echo` defaults to TX/RX `GPIO21/GPIO20` on `ESP32-C3`, `GPIO20/GPIO19` on `ESP32-C6`, and `GPIO10/GPIO11` on `ESP32-P4`.
+- `ESP32-C3` uses the same direct-boot flow as `ESP32-C6`. C3 requires silicon revision 3 or later; see [Espressif's direct-boot example](https://github.com/espressif/esp32c3-direct-boot-example).
+- On `ESP32-C3`, the existing `mtimer` API uses SYSTIMER unit 0 / target 0 at 16 MHz, with CPU interrupt 7 reserved for timer callbacks. Software interrupts use FROM_CPU0 routed to CPU interrupt 3.
+- The WS2812 output defaults to `GPIO8` on `ESP32-C3`, matching the C6 default; adjust it for your board.
 - Generic peripheral drivers/libraries are available across supported SoCs where hardware capability matches.
 
 - Currently, only ESP32‑P4 chip revision v1.x is supported by this SDK.
@@ -53,6 +57,7 @@ Currently supported SoCs:
 
 | SoC      | Architecture | Notes                                  |
 | -------- | ------------ | -------------------------------------- |
+| ESP32-C3 | RISC-V       | WiFi + BLE MCU, direct boot rev. 3+     |
 | ESP32-C6 | RISC-V       | WiFi + BLE MCU                         |
 | ESP32-P4 | RISC-V       | High-performance application processor |
 
@@ -98,6 +103,18 @@ cd ../blink_ws2812
 cd ../esp_hosted
 ./build.sh
 ```
+
+Select ESP32-C3 using the existing target option (the examples still default to C6):
+
+```bash
+cd examples/uart_echo
+./build.sh -DTARGET_SOC=esp32c3
+
+cd ../blink_ws2812
+./build.sh -DTARGET_SOC=esp32c3
+```
+
+External projects can likewise pass `-DTARGET_SOC=esp32c3` when configuring a fresh build directory. Flash the generated `app.bin` at offset `0x0`, using the existing flash script.
 
 ### Flash an SDK example
 

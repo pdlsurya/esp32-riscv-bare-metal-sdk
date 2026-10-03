@@ -16,6 +16,8 @@
 
 #if defined(TARGET_SOC_ESP32P4)
 #include "interrupt_clic.h"
+#elif defined(TARGET_SOC_ESP32C3)
+#include "interrupt_intc.h"
 #elif defined(TARGET_SOC_ESP32C6)
 #include "interrupt_plic.h"
 #endif
@@ -124,7 +126,11 @@ extern "C"
     {
         // Disable all interrupts to make updating of the interrupt mask atomic.
         unsigned old_mstatus = RV_CLEAR_CSR(mstatus, MSTATUS_MIE);
+#if defined(TARGET_SOC_ESP32C3)
+        REG_SET_BIT(INTERRUPT_CORE0_CPU_INT_ENABLE_REG, intr_mask);
+#else
         RV_SET_CSR(mie, intr_mask);
+#endif
         RV_SET_CSR(mstatus, old_mstatus & MSTATUS_MIE);
     }
 
@@ -132,7 +138,11 @@ extern "C"
     {
         // Disable all interrupts to make updating of the interrupt mask atomic.
         unsigned old_mstatus = RV_CLEAR_CSR(mstatus, MSTATUS_MIE);
+#if defined(TARGET_SOC_ESP32C3)
+        REG_CLR_BIT(INTERRUPT_CORE0_CPU_INT_ENABLE_REG, intr_mask);
+#else
         RV_CLEAR_CSR(mie, intr_mask);
+#endif
         RV_SET_CSR(mstatus, old_mstatus & MSTATUS_MIE);
     }
 

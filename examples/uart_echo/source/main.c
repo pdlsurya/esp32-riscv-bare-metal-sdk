@@ -6,7 +6,11 @@
 #include "delay.h"
 #include "uart_drv.h"
 
-#if defined(TARGET_SOC_ESP32C6)
+#if defined(TARGET_SOC_ESP32C3)
+#define DEMO_UART_PORT_NUM 0U
+#define DEMO_UART_TX_PIN 21
+#define DEMO_UART_RX_PIN 20
+#elif defined(TARGET_SOC_ESP32C6)
 #define DEMO_UART_PORT_NUM 0U
 #define DEMO_UART_TX_PIN 20
 #define DEMO_UART_RX_PIN 19

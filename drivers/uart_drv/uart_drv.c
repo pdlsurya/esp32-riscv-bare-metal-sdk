@@ -38,6 +38,12 @@
 #undef uart_ll_set_baudrate
 #endif
 
+#if defined(TARGET_SOC_ESP32C3)
+/* Use non-atomic raw LL entry points in this bare-metal SDK. */
+#undef uart_ll_enable_bus_clock
+#undef uart_ll_reset_register
+#endif
+
 static void uart_ll_enable_bus_clock_raw(uart_port_t port_num, bool enable)
 {
 #if defined(TARGET_SOC_ESP32P4)

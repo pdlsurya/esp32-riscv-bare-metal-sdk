@@ -8,8 +8,16 @@
 
 #if defined(TARGET_SOC_ESP32P4)
 #define WS2812_PIN 23
-#elif defined(TARGET_SOC_ESP32C6)
+#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
 #define WS2812_PIN 8
+#endif
+
+#if defined(TARGET_SOC_ESP32C3)
+/* Use the raw LL clock entry point in this bare-metal SDK. */
+#undef rmt_ll_enable_bus_clock
+#define WS2812_RMT_DATA RMT.data_ch[0]
+#else
+#define WS2812_RMT_DATA RMT.chndata[0].chndata
 #endif
 
 #define WS2812_BRIGHTNESS 0.5
@@ -89,7 +97,7 @@ void ws2812_write(ws2812_color_t color)
             pulse.duration1 = WS2812_T0H;
             pulse.level1 = 1;
         }
-        RMT.chndata[0].chndata = pulse.val; // Write pulse to RMT channel
+        WS2812_RMT_DATA = pulse.val; // Write pulse to RMT channel
     }
 
     // Send reset pulse
@@ -97,7 +105,7 @@ void ws2812_write(ws2812_color_t color)
     pulse.level0 = 0;
     pulse.duration1 = WS2812_T0L;
     pulse.level1 = 0;
-    RMT.chndata[0].chndata = WS2812_RESET;
+    WS2812_RMT_DATA = WS2812_RESET;
 
     rmt_ll_tx_start(&RMT, 0); // Start RMT transmission
 
