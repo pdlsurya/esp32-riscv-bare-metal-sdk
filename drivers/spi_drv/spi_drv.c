@@ -14,12 +14,14 @@
 #include "hal/gdma_ll.h"
 #include "hal/axi_dma_ll.h"
 #include "hal/cache_ll.h"
-#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
+#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6) || defined(TARGET_SOC_ESP32H2)
 #include "hal/gdma_ll.h"
 #endif
 
 #if defined(TARGET_SOC_ESP32C3)
 #define SPI_DATA_BUF(port, index) ((port)->data_buf[index])
+#elif defined(TARGET_SOC_ESP32H2)
+#define SPI_DATA_BUF(port, index) ((port)->data_buf[index].val)
 #else
 #define SPI_DATA_BUF(port, index) ((port)->data_buf[index].buf)
 #endif
@@ -73,7 +75,7 @@ typedef axi_dma_dev_t spi_gdma_dev_t;
 #define SPI_DMA_RX_SET_DESC(dma, ch, addr) axi_dma_ll_rx_set_desc_addr((dma), (ch), (addr))
 #define SPI_DMA_RX_START(dma, ch) axi_dma_ll_rx_start((dma), (ch))
 #define SPI_DMA_RX_STOP(dma, ch) axi_dma_ll_rx_stop((dma), (ch))
-#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
+#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6) || defined(TARGET_SOC_ESP32H2)
 #define SPI_DMA_DESC_ALIGN 4U
 #define SPI_DMA_BUF_ALIGN 4U
 #define SPI_DMA_MAX_CHUNK DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED
@@ -165,7 +167,7 @@ static void spi_gpio_input_config(uint8_t gpio_num, uint32_t signal_idx)
     GPIO.func_in_sel_cfg[signal_idx].in_sel = gpio_num;
 }
 
-#if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
+#if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6) || defined(TARGET_SOC_ESP32H2)
 static spi_dma_desc_t s_spi_dma_tx_desc[2][SOC_GDMA_PAIRS_PER_GROUP_MAX] __attribute__((aligned(SPI_DMA_DESC_ALIGN)));
 static spi_dma_desc_t s_spi_dma_rx_desc[2][SOC_GDMA_PAIRS_PER_GROUP_MAX] __attribute__((aligned(SPI_DMA_DESC_ALIGN)));
 static uint8_t s_spi_dma_tx_buf[2][SOC_GDMA_PAIRS_PER_GROUP_MAX][SPI_DMA_MAX_CHUNK] __attribute__((aligned(SPI_DMA_BUF_ALIGN)));
@@ -520,7 +522,7 @@ void spi_transceive(spi_dev_handle_t *dev, uint8_t *tx_buf, uint8_t *rx_buf, uin
         return;
     }
 
-#if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
+#if defined(TARGET_SOC_ESP32P4) || defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6) || defined(TARGET_SOC_ESP32H2)
     if (spi_dma_is_usable(dev, len))
     {
         spi_dma_transceive(dev, tx_buf, rx_buf, len, hold_cs_low);

@@ -7,6 +7,7 @@ Currently supported SoCs:
 
 - **ESP32-C3**
 - **ESP32-C6**
+- **ESP32-H2**
 - **ESP32-P4**
 
 ---
@@ -43,10 +44,12 @@ Currently supported SoCs:
 ### Target-Specific Notes
 
 - `esp_hosted` BLE + Wi-Fi/lwIP integration is supported on `ESP32-P4` target only.
-- `uart_echo` defaults to TX/RX `GPIO21/GPIO20` on `ESP32-C3`, `GPIO20/GPIO19` on `ESP32-C6`, and `GPIO10/GPIO11` on `ESP32-P4`.
+- `uart_echo` defaults to TX/RX `GPIO21/GPIO20` on `ESP32-C3`, `GPIO20/GPIO19` on `ESP32-C6`, `GPIO24/GPIO23` on `ESP32-H2`, and `GPIO10/GPIO11` on `ESP32-P4`.
 - `ESP32-C3` uses the same direct-boot flow as `ESP32-C6`. C3 requires silicon revision 3 or later; see [Espressif's direct-boot example](https://github.com/espressif/esp32c3-direct-boot-example).
 - On `ESP32-C3`, the existing `mtimer` API uses SYSTIMER unit 0 / target 0 at 16 MHz, with CPU interrupt 7 reserved for timer callbacks. Software interrupts use FROM_CPU0 routed to CPU interrupt 3.
 - The WS2812 output defaults to `GPIO8` on `ESP32-C3`, matching the C6 default; adjust it for your board.
+- `ESP32-H2` follows the C6 direct-boot and PLIC/CLINT layout, with a 96 MHz CPU/timer and 32 MHz AHB/APB and crystal clocks. Its linker script uses the lower 256 KiB of SRAM, reserving the upper 64 KiB as in [Espressif's H2 direct-boot example](https://github.com/espressif/esp32c3-direct-boot-example/tree/main/ld/esp32h2).
+- The WS2812 output defaults to `GPIO8` on `ESP32-H2`, matching the [ESP32-H2-DevKitM-1 RGB LED](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32h2/esp32-h2-devkitm-1/user_guide.html).
 - Generic peripheral drivers/libraries are available across supported SoCs where hardware capability matches.
 
 - Currently, only ESP32‑P4 chip revision v1.x is supported by this SDK.
@@ -59,6 +62,7 @@ Currently supported SoCs:
 | -------- | ------------ | -------------------------------------- |
 | ESP32-C3 | RISC-V       | WiFi + BLE MCU, direct boot rev. 3+     |
 | ESP32-C6 | RISC-V       | WiFi + BLE MCU                         |
+| ESP32-H2 | RISC-V       | BLE + IEEE 802.15.4 MCU                 |
 | ESP32-P4 | RISC-V       | High-performance application processor |
 
 Targets are selected during **CMake configuration**.
@@ -114,7 +118,17 @@ cd ../blink_ws2812
 ./build.sh -DTARGET_SOC=esp32c3
 ```
 
-External projects can likewise pass `-DTARGET_SOC=esp32c3` when configuring a fresh build directory. Flash the generated `app.bin` at offset `0x0`, using the existing flash script.
+Select ESP32-H2 with the same option:
+
+```bash
+cd examples/uart_echo
+./build.sh -DTARGET_SOC=esp32h2
+
+cd ../blink_ws2812
+./build.sh -DTARGET_SOC=esp32h2
+```
+
+External projects can likewise pass `-DTARGET_SOC=esp32c3` or `-DTARGET_SOC=esp32h2` when configuring a fresh build directory. Flash the generated `app.bin` at offset `0x0`, using the existing flash script.
 
 ### Flash an SDK example
 

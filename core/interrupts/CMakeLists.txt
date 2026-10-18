@@ -10,7 +10,7 @@ if(TARGET_SOC STREQUAL "esp32c3")
 
     target_sources(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}/interrupt_intc.c)
 
-elseif(TARGET_SOC STREQUAL "esp32c6")
+elseif(TARGET_SOC STREQUAL "esp32c6" OR TARGET_SOC STREQUAL "esp32h2")
 
     target_sources(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}/interrupt_plic.c)
 

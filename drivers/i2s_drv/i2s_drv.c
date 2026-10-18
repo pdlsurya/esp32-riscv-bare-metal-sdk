@@ -639,6 +639,18 @@ static uint32_t i2s_get_source_clock_hz(i2s_clock_src_t src)
     default:
         return I2S_LL_DEFAULT_CLK_FREQ;
     }
+#elif defined(TARGET_SOC_ESP32H2)
+    switch (src)
+    {
+    case I2S_CLK_SRC_XTAL:
+        return XTAL_CLK_FREQ;
+    case I2S_CLK_SRC_PLL_96M:
+        return 96000000U;
+    case I2S_CLK_SRC_PLL_64M:
+        return 64000000U;
+    default:
+        return I2S_LL_DEFAULT_CLK_FREQ;
+    }
 #else
     switch (src)
     {

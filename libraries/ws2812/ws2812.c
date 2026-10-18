@@ -8,7 +8,7 @@
 
 #if defined(TARGET_SOC_ESP32P4)
 #define WS2812_PIN 23
-#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6)
+#elif defined(TARGET_SOC_ESP32C3) || defined(TARGET_SOC_ESP32C6) || defined(TARGET_SOC_ESP32H2)
 #define WS2812_PIN 8
 #endif
 

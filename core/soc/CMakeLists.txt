@@ -10,7 +10,7 @@ target_include_directories(esp32_rv_sdk PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}/include
 )
 
-if(TARGET_SOC STREQUAL "esp32c3" OR TARGET_SOC STREQUAL "esp32c6")
+if(TARGET_SOC STREQUAL "esp32c3" OR TARGET_SOC STREQUAL "esp32c6" OR TARGET_SOC STREQUAL "esp32h2")
 
     target_include_directories(esp32_rv_sdk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_SOC}/register)
 

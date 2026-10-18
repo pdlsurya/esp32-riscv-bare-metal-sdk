@@ -18,7 +18,7 @@
 #include "interrupt_clic.h"
 #elif defined(TARGET_SOC_ESP32C3)
 #include "interrupt_intc.h"
-#elif defined(TARGET_SOC_ESP32C6)
+#elif defined(TARGET_SOC_ESP32C6) || defined(TARGET_SOC_ESP32H2)
 #include "interrupt_plic.h"
 #endif
 
