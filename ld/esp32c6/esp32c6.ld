@@ -2,7 +2,11 @@ ENTRY(_start)
 MEMORY
 {
     FLASH (rx) : ORIGIN = 0x42000000 , LENGTH = 4M
-    RAM (rwx) : ORIGIN = 0x40800000 , LENGTH = 512K
+    /* Direct boot: keep the ROM boot stack (0x4087C610..0x4087E610)
+     * and ROM .data/.bss (0x4087E610..0x40880000) outside application RAM.
+     * There is no second-stage bootloader to reserve space for here.
+     */
+    RAM (rwx) : ORIGIN = 0x40800000 , LENGTH = 0x4087C610 - 0x40800000
 }
 SECTIONS
 {

@@ -2,7 +2,12 @@ ENTRY(_start)
 MEMORY
 {
     FLASH (rx) : ORIGIN = 0x40000000 , LENGTH = 16M
-    RAM (rwx) : ORIGIN = 0x4FF00000 , LENGTH = 768K
+    /* P4 v1.x direct boot: keep the ROM CPU1 stack and .data/.bss
+     * (0x4FF3AFC0..0x4FF40000) outside application RAM.
+     * Use only the contiguous low SRAM region. SRAM above 0x4FF40000
+     * requires a separate region and an explicit L2 cache configuration.
+     */
+    RAM (rwx) : ORIGIN = 0x4FF00000 , LENGTH = 0x4FF3AFC0 - 0x4FF00000
     TCM (rwx): ORIGIN = 0x30100000 , LENGTH = 8K
 }
 SECTIONS

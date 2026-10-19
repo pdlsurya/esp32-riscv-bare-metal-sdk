@@ -47,3 +47,11 @@ target_link_options(esp32_rv_sdk PUBLIC
     "SHELL:-T${CMAKE_CURRENT_SOURCE_DIR}/core/esp_rom/${TARGET_SOC}/ld/${TARGET_SOC}.rom.ld"
     "SHELL:-T${CMAKE_CURRENT_SOURCE_DIR}/core/esp_rom/${TARGET_SOC}/ld/${TARGET_SOC}.rom.api.ld"
 )
+
+# Relink applications when an SDK linker script changes.
+set_property(TARGET esp32_rv_sdk APPEND PROPERTY INTERFACE_LINK_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/ld/${TARGET_SOC}/${TARGET_SOC}.ld
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/soc/${TARGET_SOC}/ld/${TARGET_SOC}.peripherals.ld
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/esp_rom/${TARGET_SOC}/ld/${TARGET_SOC}.rom.ld
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/esp_rom/${TARGET_SOC}/ld/${TARGET_SOC}.rom.api.ld
+)
